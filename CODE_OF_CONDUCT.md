@@ -63,6 +63,9 @@ reported to the community leaders responsible for enforcement at
 mailto:dsa663838@gmail.com.
 All complaints will be reviewed and investigated promptly and fairly.
 
+Do not use this address for security problems. Report a security problem
+privately at https://github.com/Willis0826/cwatch/security/advisories/new.
+
 All community leaders are obligated to respect the privacy and security of the
 reporter of any incident.
 

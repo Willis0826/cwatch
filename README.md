@@ -128,3 +128,5 @@ cwatch downloads the release with `curl`, checks the SHA-256 hash, and replaces 
 ---
 
 For the build steps, the commands, and the design, see [DEVELOP.md](DEVELOP.md).
+
+To report a problem or to propose a change, see [CONTRIBUTING.md](CONTRIBUTING.md).
