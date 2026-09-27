@@ -240,14 +240,16 @@ func (m *Model) clampSummaryScroll() {
 }
 
 // summaryLines wraps the Markdown text of the summary. It keeps the indent
-// of list items and shows a bold line as a heading.
+// of list items. It shows a Markdown heading, such as "## Done", in the
+// title style, and a bold line, such as a project name, as a heading.
 func (m Model) summaryLines(w int) []string {
 	t := m.theme
 	var out []string
 	for _, raw := range strings.Split(textutil.Sanitize(m.sum.text, true), "\n") {
 		trimmed := strings.TrimLeft(raw, " \t")
 		indent := strings.Repeat(" ", len(raw)-len(trimmed))
-		heading := strings.HasPrefix(trimmed, "**") || strings.HasPrefix(trimmed, "#")
+		section := strings.HasPrefix(trimmed, "#")
+		heading := section || strings.HasPrefix(trimmed, "**")
 		text := strings.ReplaceAll(trimmed, "**", "")
 		marker := ""
 		for _, p := range []string{"- ", "* ", "+ "} {
@@ -267,7 +269,10 @@ func (m Model) summaryLines(w int) []string {
 				p = strings.Repeat(" ", len([]rune(prefix)))
 			}
 			l = p + l
-			if heading {
+			switch {
+			case section:
+				l = t.title.Render(strings.TrimSpace(l))
+			case heading:
 				l = t.key.Render(l)
 			}
 			out = append(out, l)

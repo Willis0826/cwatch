@@ -11,6 +11,7 @@ import (
 	"cwatch/internal/app"
 	"cwatch/internal/hooks"
 	"cwatch/internal/state"
+	"cwatch/internal/summary"
 	"cwatch/internal/transcript"
 )
 
@@ -82,4 +83,35 @@ func TestRenderDemo(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(dir, "details.ans"), []byte(m.render()), 0o644); err != nil {
 		t.Fatal(err)
 	}
+
+	m.details = false
+	next, _ = m.Update(tea.WindowSizeMsg{Width: 118, Height: 30})
+	m = next.(Model)
+	m.sum = summaryState{mode: summaryView, rng: summary.LastWeek(now), text: demoSummary}
+	if err := os.WriteFile(filepath.Join(dir, "summary.ans"), []byte(m.render()), 0o644); err != nil {
+		t.Fatal(err)
+	}
 }
+
+const demoSummary = `## Done
+
+**api-server**
+- Fixed the auth timeout: the token refresh now retries two times before it fails. Merged PR #412.
+- Added two indexes to the orders table and ran the migration on staging.
+
+**web-app**
+- Added debounce to the search box and updated the tests.
+
+**docs**
+- Updated the install guide and fixed the broken links.
+
+## Open
+
+**api-server**
+- Migration on production: waits for the release window on Thursday.
+
+**mobile**
+- Release 2.4: all tests pass, and the build waits for review.
+
+**billing**
+- Rate limit errors on the invoice export: the cause is not known yet.`

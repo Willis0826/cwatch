@@ -20,7 +20,7 @@ make vet          # go vet ./...
 make clean        # delete bin/ (keeps the prebuilt dist/ binaries)
 ```
 
-To make the README images again, run `make screenshots`. This target needs Go, Python 3, and Google Chrome. It renders the real dashboard with demo data (`internal/tui/demo_test.go`), converts the ANSI output to HTML (`scripts/ansi2png.py`), and takes a screenshot with headless Chrome. It writes `docs/images/dashboard.png` and `docs/images/details.png`.
+To make the README images again, run `make screenshots`. This target needs Go, Python 3, and Google Chrome. It renders the real dashboard with demo data (`internal/tui/demo_test.go`), converts the ANSI output to HTML (`scripts/ansi2png.py`), and takes a screenshot with headless Chrome. It writes `docs/images/dashboard.png`, `docs/images/details.png`, and `docs/images/summary.png`.
 
 ## Release
 
@@ -117,6 +117,7 @@ Uninstall removes only the handlers that cwatch owns. It removes a matcher group
 | `cwatch list --all` | Include ended instances. |
 | `cwatch focus <id>` | Focus the iTerm2 pane of an instance. A unique prefix of the ID is sufficient. |
 | `cwatch summary yesterday\|week [--refresh]` | Print a bullet list of your work of yesterday or last week. See [Summary](#summary). |
+| `cwatch upgrade [--check] [--force]` | Install the latest release in place of the running binary. See [Upgrade](#upgrade). |
 | `cwatch setup [--dry-run]` | Install the hooks. |
 | `cwatch uninstall [--dry-run]` | Remove the hooks. Keep the history. |
 | `cwatch doctor` | Check the platform, executable, settings, hooks, state, iTerm2, and Claude Code version. |
@@ -229,6 +230,23 @@ If no session has records in the range, cwatch does not start `claude`.
 
 CAUTION: The child `claude` process starts the cwatch hooks. cwatch sets `CWATCH_DISABLE=1` for the child, and the hook does nothing when this variable is set. A hook binary older than this feature ignores the variable. Run `make setup` again after you update cwatch.
 
+## Upgrade
+
+`cwatch upgrade` does these steps:
+
+1. It finds the tag of the latest release. It runs `curl` and follows the redirect of `https://github.com/Willis0826/cwatch/releases/latest`. This does not use the GitHub API, so no rate limit applies. Pre-releases are not included.
+2. It compares the tag with the running version. If the running version is the same or newer, it stops. `--check` prints the two versions and stops.
+3. It creates a temporary file in the directory of the running binary. If it cannot write to that directory, it stops and prints `sudo <path> upgrade`.
+4. It downloads `cwatch-darwin-<arch>.tar.gz` and `SHA256SUMS` of that tag, and compares the SHA-256 hash.
+5. It extracts the `cwatch` file (at most 64 MiB) into the temporary file and runs `<temporary file> version`. The output must report the release version.
+6. It renames the temporary file over the running binary. The rename is atomic, so a hook that starts during the upgrade runs the old or the new binary.
+
+If a step fails, the old binary does not change. A development build (version `dev`) needs `--force`, because the upgrade replaces a build from source with the release build.
+
+The binary still links no HTTP or TLS client. `curl` makes the requests. `TestNoNetworkClientDependencies` checks this.
+
+CAUTION: The hash check finds a damaged download. It does not prove who made the release, because `SHA256SUMS` comes from the same release. The binaries are not signed. The manual install has the same limit.
+
 ## Storage and privacy
 
 - The state directory is `~/.cwatch/` (mode 0700). The database is `~/.cwatch/cwatch.db` (mode 0600).
@@ -239,6 +257,7 @@ CAUTION: The child `claude` process starts the cwatch hooks. cwatch sets `CWATCH
 - cwatch removes control characters and ANSI escape sequences from all text before it stores or shows that text.
 - Retention: `list` and the dashboard delete events older than 14 days, keep at most 50,000 events, and delete ended instances older than 30 days. The hook never deletes data.
 - `cwatch summary` sends a digest to Claude through `claude -p`. The digest has your prompts (at most 300 characters each), the AI titles, the last Claude reply of each session (at most 600 characters), the paths of the edited files, and the commit subjects. The other commands make no model calls.
+- `cwatch upgrade` sends requests to github.com through `curl`. It sends no data about your sessions.
 - Hook errors go to stderr (the Claude Code debug log) and to `~/.cwatch/hook-errors.log` (at most about 256 KiB, one rotated copy).
 
 ## Hook behaviour

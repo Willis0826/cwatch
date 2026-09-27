@@ -48,6 +48,9 @@ type Env struct {
 	Summarizer Summarizer
 	// Commits lists the commits of the user for a summary. Nil means none.
 	Commits summary.CommitFunc
+	// Releases finds and downloads releases for an upgrade. Nil means
+	// GitHub through curl.
+	Releases Releases
 }
 
 // DefaultEnv returns an Env for the real system.

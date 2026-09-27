@@ -11,7 +11,7 @@
 #   NO_EXCERPTS=1    Do not store prompt or response excerpts.
 #   SETTINGS=FILE    Claude Code settings file (default: cwatch default).
 
-VERSION ?= 0.2.0
+VERSION ?= 0.3.0
 LDFLAGS := -s -w -X main.version=$(VERSION)
 
 ARCH := $(shell uname -m | sed 's/x86_64/amd64/')
@@ -118,6 +118,7 @@ screenshots:
 	CWATCH_DEMO_DIR=$$tmp go test -count=1 -run TestRenderDemo ./internal/tui/ >/dev/null && \
 	python3 scripts/ansi2png.py $$tmp/dashboard.ans docs/images/dashboard.png "🟡1 🔴1 🟢2 ⚪2 · cwatch" && \
 	python3 scripts/ansi2png.py $$tmp/details.ans docs/images/details.png "🟡1 🔴1 🟢2 ⚪2 · cwatch" && \
+	python3 scripts/ansi2png.py $$tmp/summary.ans docs/images/summary.png "🟡1 🔴1 🟢2 ⚪2 · cwatch" && \
 	rm -rf $$tmp
 
 clean:

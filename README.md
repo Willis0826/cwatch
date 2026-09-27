@@ -15,7 +15,9 @@ The table also shows the project, the git branch, the current tool or the latest
 
 ![The details view](docs/images/details.png)
 
-cwatch runs only on your computer. It makes no model calls and uses no network, except `cwatch summary`. Its data stays in `~/.cwatch`.
+Push `s` to get a summary of your work of yesterday or last week. See [Summary of your work](#summary-of-your-work).
+
+cwatch runs only on your computer. It makes no model calls and uses no network, except `cwatch summary` and `cwatch upgrade`. Its data stays in `~/.cwatch`.
 
 ## Install
 
@@ -85,7 +87,22 @@ cwatch summary week
 - cwatch keeps each result in `~/.cwatch/summaries`. The next call shows the stored result immediately. To make the summary again, add `--refresh`.
 - In the dashboard, push `s` and select the range. In the summary, push `r` to make it again.
 
+![The summary view](docs/images/summary.png)
+
 Claude Code keeps transcripts for 30 days by default. cwatch cannot summarise older work.
+
+## Upgrade
+
+To install the latest release, run:
+
+```sh
+cwatch upgrade --check   # show the current and the latest version
+cwatch upgrade
+```
+
+cwatch downloads the release with `curl`, checks the SHA-256 hash, and replaces its own binary. The hooks keep the same path, so you do not need to run `cwatch setup` again. If you cannot write to the install directory, cwatch prints the `sudo` command to use.
+
+`cwatch upgrade` exists from version 0.3.0. To upgrade from an older version, repeat step 1 of the install.
 
 ## Uninstall
 

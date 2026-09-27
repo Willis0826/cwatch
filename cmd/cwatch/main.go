@@ -36,6 +36,8 @@ Usage:
   cwatch summary yesterday|week [--refresh]
                                    Summarise your work of yesterday or last week
                                    with "claude -p"
+  cwatch upgrade [--check] [--force]
+                                   Install the latest release in place of this binary
   cwatch setup [--dry-run]         Install the cwatch hooks
   cwatch uninstall [--dry-run]     Remove the cwatch hooks; keep the history
   cwatch doctor                    Check configuration and tracking
@@ -113,7 +115,7 @@ func run(args []string, stdout, stderr io.Writer) int {
 	cmd, rest := splitCommand(args)
 	var c common
 	fs := newFlags(cmd, stderr, &c)
-	var jsonOut, all, dryRun, refresh bool
+	var jsonOut, all, dryRun, refresh, check, force bool
 	switch cmd {
 	case "list":
 		fs.BoolVar(&jsonOut, "json", false, "JSON output")
@@ -122,6 +124,9 @@ func run(args []string, stdout, stderr io.Writer) int {
 		fs.BoolVar(&all, "all", false, "include ended instances")
 	case "summary":
 		fs.BoolVar(&refresh, "refresh", false, "make the summary again")
+	case "upgrade":
+		fs.BoolVar(&check, "check", false, "only compare the versions")
+		fs.BoolVar(&force, "force", false, "replace a development build or the same version")
 	case "setup", "uninstall":
 		fs.BoolVar(&dryRun, "dry-run", false, "show the changes only")
 	case "help", "-h", "--help":
@@ -202,6 +207,15 @@ func run(args []string, stdout, stderr io.Writer) int {
 
 	case "summary":
 		return summaryCommand(ctx, env, fs.Args(), refresh)
+
+	case "upgrade":
+		if fs.NArg() > 0 {
+			fmt.Fprintf(stderr, "cwatch: unexpected argument %q\n", fs.Arg(0))
+			return app.ExitUsage
+		}
+		ctx, stop := signal.NotifyContext(ctx, os.Interrupt, syscall.SIGTERM)
+		defer stop()
+		return env.Upgrade(ctx, app.UpgradeOptions{Current: version, Check: check, Force: force})
 
 	case "setup":
 		return env.Setup(app.SetupOptions{DryRun: dryRun, NoExcerpts: c.noExcerpts})
