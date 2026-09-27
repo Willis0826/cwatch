@@ -22,6 +22,29 @@ make clean        # delete bin/ (keeps the prebuilt dist/ binaries)
 
 To make the README images again, run `make screenshots`. This target needs Go, Python 3, and Google Chrome. It renders the real dashboard with demo data (`internal/tui/demo_test.go`), converts the ANSI output to HTML (`scripts/ansi2png.py`), and takes a screenshot with headless Chrome. It writes `docs/images/dashboard.png` and `docs/images/details.png`.
 
+## Release
+
+The workflow `.github/workflows/release.yml` publishes a release when you push a version tag:
+
+```sh
+git tag v0.1.0
+git push origin v0.1.0
+```
+
+The workflow runs on a macOS runner. It does these steps:
+
+1. It checks that the tag is a version such as `v1.2.3` or `v1.2.3-rc.1`. A tag with a suffix after `-` makes a pre-release.
+2. It runs `make vet` and `go test -race ./...`. If a check fails, it publishes nothing.
+3. It runs `make package VERSION=<version>`. This target builds both binaries and writes `dist/cwatch-darwin-arm64.tar.gz`, `dist/cwatch-darwin-amd64.tar.gz`, and `dist/SHA256SUMS`.
+4. It checks that the arm64 binary reports the version of the tag.
+5. It creates the GitHub release with generated notes and attaches the three files.
+
+The asset names contain no version. Thus the link `https://github.com/Willis0826/cwatch/releases/latest/download/cwatch-darwin-arm64.tar.gz` always gives the latest release.
+
+The binaries are not signed or notarized. A download with `curl` has no quarantine attribute, so macOS runs it. A download with a web browser needs `xattr -d com.apple.quarantine cwatch`.
+
+To test the packaging locally, run `make package VERSION=0.0.0-test`.
+
 ## What `make setup` does
 
 This command does these steps:

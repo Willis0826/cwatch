@@ -24,7 +24,7 @@ INSTALLED := $(BINDIR)/cwatch
 SETUP_FLAGS := $(if $(NO_EXCERPTS),--no-excerpts) $(if $(SETTINGS),--settings-file "$(SETTINGS)")
 SETTINGS_FLAG := $(if $(SETTINGS),--settings-file "$(SETTINGS)")
 
-.PHONY: build test race vet dist install hooks-check hooks doctor setup uninstall screenshots clean
+.PHONY: build test race vet dist package install hooks-check hooks doctor setup uninstall screenshots clean
 
 build:
 	CGO_ENABLED=0 go build -trimpath -ldflags "$(LDFLAGS)" -o bin/cwatch ./cmd/cwatch
@@ -41,6 +41,19 @@ vet:
 dist:
 	CGO_ENABLED=0 GOOS=darwin GOARCH=arm64 go build -trimpath -ldflags "$(LDFLAGS)" -o dist/cwatch-darwin-arm64 ./cmd/cwatch
 	CGO_ENABLED=0 GOOS=darwin GOARCH=amd64 go build -trimpath -ldflags "$(LDFLAGS)" -o dist/cwatch-darwin-amd64 ./cmd/cwatch
+
+# Pack the dist/ binaries for a release. Each archive holds one file named
+# cwatch. The asset names have no version, so the "latest" download links
+# stay the same.
+package: dist
+	@rm -f dist/*.tar.gz dist/SHA256SUMS
+	@for arch in arm64 amd64; do \
+		tmp=$$(mktemp -d) && \
+		cp dist/cwatch-darwin-$$arch $$tmp/cwatch && chmod 755 $$tmp/cwatch && \
+		COPYFILE_DISABLE=1 tar --uid 0 --gid 0 --uname root --gname wheel -czf dist/cwatch-darwin-$$arch.tar.gz -C $$tmp cwatch && \
+		rm -rf $$tmp || exit 1; \
+	done
+	@cd dist && shasum -a 256 cwatch-darwin-*.tar.gz > SHA256SUMS && cat SHA256SUMS
 
 # Install the binary. Build it when Go is available. Else use the prebuilt
 # binary in dist/ for this architecture.

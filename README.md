@@ -19,19 +19,27 @@ cwatch runs only on your computer. It makes no model calls and uses no network. 
 
 ## Install
 
-You need macOS, iTerm2, Claude Code, and Go 1.26 or later. To install Go, run `brew install go`.
+You need macOS, iTerm2, and Claude Code.
 
-1. In the project directory, run:
+1. Download and install the program. Use `arm64` for Apple silicon and `amd64` for an Intel Mac:
 
    ```sh
-   make setup
+   curl -fsSLO https://github.com/Willis0826/cwatch/releases/latest/download/cwatch-darwin-arm64.tar.gz
+   tar -xzf cwatch-darwin-arm64.tar.gz
+   sudo install -m 755 cwatch /usr/local/bin/cwatch
    ```
 
-   This command installs `cwatch`, shows the change to your Claude Code settings, and asks you to confirm. Then it adds the hooks and checks the result.
+2. Look at the change to your Claude Code settings, then add the hooks:
 
-2. Restart the Claude Code sessions that already run, then submit a prompt in each.
+   ```sh
+   cwatch setup --dry-run
+   cwatch setup
+   cwatch doctor
+   ```
 
-3. Open the dashboard:
+3. Restart the Claude Code sessions that already run, then submit a prompt in each.
+
+4. Open the dashboard:
 
    ```sh
    cwatch
@@ -47,15 +55,32 @@ You need macOS, iTerm2, Claude Code, and Go 1.26 or later. To install Go, run `b
 
 The first time that you push `Enter`, macOS can ask for permission to control iTerm2. Allow it.
 
+Do not move the program after setup. The hooks contain its path. If you move it, run `cwatch setup` again.
+
+If you download the archive with a web browser, macOS can block the program. To unblock it, run `xattr -d com.apple.quarantine cwatch` before the `install` command.
+
+### Install from source
+
+If you have Go 1.26 or later (`brew install go`), run this command in the project directory instead of steps 1 and 2:
+
+```sh
+make setup
+```
+
+This command builds and installs `cwatch`, shows the change to your settings, asks you to confirm, adds the hooks, and runs `cwatch doctor`.
+
 ## Uninstall
 
-1. In the project directory, run:
+1. Remove the hooks and the program:
 
    ```sh
-   make uninstall
+   cwatch uninstall
+   sudo rm /usr/local/bin/cwatch
    ```
 
-   This command removes the cwatch hooks from your Claude Code settings and deletes the `cwatch` program. Your other settings and hooks do not change.
+   If you installed from source, run `make uninstall` in the project directory instead.
+
+   The uninstall removes only the cwatch hooks from your Claude Code settings. Your other settings and hooks do not change.
 
 2. Restart the Claude Code sessions that run.
 
