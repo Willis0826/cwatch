@@ -1,4 +1,4 @@
-# cwatch
+![cwatch: Keep an eye on your Claudes.](docs/images/banner.png)
 
 **See all your Claude Code sessions in one place.**
 
