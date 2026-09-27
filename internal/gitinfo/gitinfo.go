@@ -40,6 +40,22 @@ func Branch(dir string) string {
 	return ""
 }
 
+// Root returns the top directory of the repository that contains dir. It
+// returns "" when dir is not in a repository.
+func Root(dir string) string {
+	for i := 0; i < maxDepth && dir != ""; i++ {
+		if _, err := os.Stat(filepath.Join(dir, ".git")); err == nil {
+			return dir
+		}
+		parent := filepath.Dir(dir)
+		if parent == dir {
+			break
+		}
+		dir = parent
+	}
+	return ""
+}
+
 // readGitFile reads a ".git" file of a worktree or submodule.
 func readGitFile(path, base string) string {
 	data, err := readSmall(path)

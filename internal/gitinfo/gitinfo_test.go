@@ -30,3 +30,16 @@ func TestBranch(t *testing.T) {
 		t.Fatalf("no repository: %q", got)
 	}
 }
+
+func TestRoot(t *testing.T) {
+	root := t.TempDir()
+	os.MkdirAll(filepath.Join(root, ".git"), 0o700)
+	sub := filepath.Join(root, "a", "b")
+	os.MkdirAll(sub, 0o700)
+	if got := Root(sub); got != root {
+		t.Fatalf("root %q, want %q", got, root)
+	}
+	if got := Root(t.TempDir()); got != "" {
+		t.Fatalf("no repository: %q", got)
+	}
+}

@@ -53,6 +53,11 @@ func ParseHookArgs(args []string) HookOptions {
 // context, or makes a permission decision. It writes diagnostics to stderr
 // (the Claude Code debug log) and to a bounded local log file.
 func RunHook(args []string, stdin io.Reader, stderr io.Writer, getenv func(string) string, insp process.Inspector) int {
+	// A summary starts Claude Code with this variable. That process is not
+	// a session of the user.
+	if getenv(DisableEnv) != "" {
+		return 0
+	}
 	syscall.Umask(0o077)
 	opts := ParseHookArgs(args)
 	if opts.StateDir == "" {

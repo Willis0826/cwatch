@@ -1,4 +1,4 @@
-// Package hooks parses Claude Code hook input and normalizes it into events.
+// Package hooks parses Claude Code hook input and normalises it into events.
 //
 // The parser reads the top-level JSON object key by key. It keeps only the
 // fields that the monitor needs and skips all other fields. It does not keep
@@ -14,7 +14,7 @@ import (
 	"cwatch/internal/textutil"
 )
 
-// Kind is a normalized event kind.
+// Kind is a normalised event kind.
 type Kind string
 
 // Normalized event kinds.
@@ -68,7 +68,7 @@ const (
 	MaxPath             = 4096
 )
 
-// Event is a normalized hook event. It holds no tool input or tool output.
+// Event is a normalised hook event. It holds no tool input or tool output.
 type Event struct {
 	HookEventName    string `json:"hook_event_name"`
 	Kind             Kind   `json:"kind"`

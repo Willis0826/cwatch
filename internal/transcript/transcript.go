@@ -99,16 +99,16 @@ func (ex *Excerpts) parse(buf []byte, maxRunes int) {
 				ex.Assistant = textutil.Bounded(text, maxRunes)
 			}
 		case "user":
-			if ex.User == "" && !looksSynthetic(text) {
+			if ex.User == "" && !LooksSynthetic(text) {
 				ex.User = textutil.Bounded(text, maxRunes)
 			}
 		}
 	}
 }
 
-// looksSynthetic reports whether a user record holds text that Claude Code
+// LooksSynthetic reports whether a user record holds text that Claude Code
 // generated, such as command output, instead of a typed prompt.
-func looksSynthetic(s string) bool {
+func LooksSynthetic(s string) bool {
 	s = strings.TrimSpace(s)
 	for _, p := range []string{"<command-", "<local-command", "<system-reminder>", "<bash-", "[Request interrupted"} {
 		if strings.HasPrefix(s, p) {
@@ -130,21 +130,24 @@ type message struct {
 	Content json.RawMessage `json:"content"`
 }
 
-// text returns the text blocks of a message. It ignores tool calls, tool
-// results, images, and thinking blocks.
-func (m message) text() string {
-	if len(m.Content) == 0 {
+func (m message) text() string { return Text(m.Content) }
+
+// Text returns the text blocks of message content. The content is a string
+// or a list of blocks. It ignores tool calls, tool results, images, and
+// thinking blocks.
+func Text(content json.RawMessage) string {
+	if len(content) == 0 {
 		return ""
 	}
 	var s string
-	if err := json.Unmarshal(m.Content, &s); err == nil {
+	if err := json.Unmarshal(content, &s); err == nil {
 		return s
 	}
 	var blocks []struct {
 		Type string `json:"type"`
 		Text string `json:"text"`
 	}
-	if err := json.Unmarshal(m.Content, &blocks); err != nil {
+	if err := json.Unmarshal(content, &blocks); err != nil {
 		return ""
 	}
 	var parts []string

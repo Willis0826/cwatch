@@ -15,7 +15,7 @@ The table also shows the project, the git branch, the current tool or the latest
 
 ![The details view](docs/images/details.png)
 
-cwatch runs only on your computer. It makes no model calls and uses no network. Its data stays in `~/.cwatch`.
+cwatch runs only on your computer. It makes no model calls and uses no network, except `cwatch summary`. Its data stays in `~/.cwatch`.
 
 ## Install
 
@@ -51,6 +51,7 @@ You need macOS, iTerm2, and Claude Code.
    | `Enter` | Go to the pane of the session. |
    | `→` / `←` | Open or close the details. |
    | `/` | Filter. |
+   | `s` | Summarise your work of yesterday or last week. |
    | `q` | Quit. |
 
 The first time that you push `Enter`, macOS can ask for permission to control iTerm2. Allow it.
@@ -68,6 +69,23 @@ make setup
 ```
 
 This command builds and installs `cwatch`, shows the change to your settings, asks you to confirm, adds the hooks, and runs `cwatch doctor`.
+
+## Summary of your work
+
+cwatch can write a bullet list of your work from your Claude Code sessions:
+
+```sh
+cwatch summary yesterday
+cwatch summary week
+```
+
+- `yesterday` is the previous calendar day. `week` is the previous week, from Monday to Sunday.
+- The summary has two sections: **Done** for finished work, and **Open** for work that was not finished at the end of the range.
+- cwatch reads your transcripts in `~/.claude/projects` and the git commits of your projects. Then it sends a short digest to Claude with `claude -p`. The call uses your Claude Code login.
+- cwatch keeps each result in `~/.cwatch/summaries`. The next call shows the stored result immediately. To make the summary again, add `--refresh`.
+- In the dashboard, push `s` and select the range. In the summary, push `r` to make it again.
+
+Claude Code keeps transcripts for 30 days by default. cwatch cannot summarise older work.
 
 ## Uninstall
 

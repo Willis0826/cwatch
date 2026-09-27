@@ -52,7 +52,7 @@ func (e *Env) Focus(ctx context.Context, id string) (terminal.Pane, state.Instan
 	case state.TerminalSSH:
 		return terminal.Pane{}, in, refuse("instance %s runs in an SSH session; focus of remote sessions is not supported", in.ShortID())
 	default:
-		return terminal.Pane{}, in, refuse("instance %s does not run in a recognized iTerm2 pane (terminal: %s)", in.ShortID(), in.TerminalKind)
+		return terminal.Pane{}, in, refuse("instance %s does not run in a recognised iTerm2 pane (terminal: %s)", in.ShortID(), in.TerminalKind)
 	}
 	if in.OwnerPID <= 0 || in.OwnerStart <= 0 {
 		return terminal.Pane{}, in, refuse("the owning process of instance %s is unknown, so cwatch cannot verify its pane", in.ShortID())

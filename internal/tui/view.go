@@ -17,7 +17,7 @@ import (
 	"cwatch/internal/textutil"
 )
 
-// theme holds the colors for a light or a dark terminal background.
+// theme holds the colours for a light or a dark terminal background.
 type theme struct {
 	accent, text, faint, border, selBg, headBg  color.Color
 	red, yellow, green, gray, blue              color.Color
@@ -266,14 +266,24 @@ func (m Model) windowTitle() string {
 	return strings.Join(parts, " ") + " · cwatch"
 }
 
-func (m Model) render() string {
-	w := m.width
-	if w < 40 {
-		w = 40
+// renderWidth returns the width that the dashboard uses for a terminal
+// width.
+func renderWidth(width int) int {
+	if width < 40 {
+		return 40
 	}
+	return width
+}
+
+func (m Model) render() string {
+	w := renderWidth(m.width)
 	var b strings.Builder
 	b.WriteString(m.titleBar(w) + "\n")
 	switch {
+	case m.sum.mode == summaryMenu:
+		b.WriteString(m.renderSummaryMenu(w))
+	case m.sum.mode == summaryView:
+		b.WriteString(m.renderSummary(w))
 	case m.details:
 		b.WriteString(m.renderDetails(w))
 	case !m.loaded:
@@ -435,10 +445,15 @@ func (m Model) footer(w int) string {
 		}
 	}
 	type hint struct{ key, desc string }
-	hints := []hint{{"↑↓/jk", "select"}, {"enter", "focus"}, {"/", "filter"}, {"→/d", "details"}, {"a", "all"}, {"q", "quit"}}
-	if m.filtering {
+	hints := []hint{{"↑↓/jk", "select"}, {"enter", "focus"}, {"/", "filter"}, {"→/d", "details"}, {"s", "summary"}, {"a", "all"}, {"q", "quit"}}
+	switch {
+	case m.sum.mode == summaryMenu:
+		hints = []hint{{"↑↓/jk", "select"}, {"enter/y/w", "summarise"}, {"esc", "close"}, {"q", "quit"}}
+	case m.sum.mode == summaryView:
+		hints = []hint{{"↑↓/jk", "scroll"}, {"pgup/pgdn", "page"}, {"r", "make again"}, {"←/esc", "close"}, {"q", "quit"}}
+	case m.filtering:
 		hints = []hint{{"type", "filter"}, {"enter", "keep"}, {"esc", "clear"}}
-	} else if m.details {
+	case m.details:
 		hints = []hint{{"↑↓/jk", "select"}, {"enter", "focus"}, {"←/d/esc", "close"}, {"q", "quit"}}
 	}
 	var parts []string

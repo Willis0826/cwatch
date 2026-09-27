@@ -30,6 +30,11 @@ func model(list ...state.Instance) Model {
 }
 
 func key(m Model, k string) Model {
+	next, _ := m.Update(keyMsg(k))
+	return next.(Model)
+}
+
+func keyMsg(k string) tea.KeyPressMsg {
 	var msg tea.KeyPressMsg
 	switch k {
 	case "down":
@@ -48,8 +53,7 @@ func key(m Model, k string) Model {
 		r := []rune(k)[0]
 		msg = tea.KeyPressMsg{Code: r, Text: k}
 	}
-	next, _ := m.Update(msg)
-	return next.(Model)
+	return msg
 }
 
 func TestSelectionSurvivesRefresh(t *testing.T) {

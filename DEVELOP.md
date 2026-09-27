@@ -41,7 +41,7 @@ The workflow runs on a macOS runner. It does these steps:
 
 The asset names contain no version. Thus the link `https://github.com/Willis0826/cwatch/releases/latest/download/cwatch-darwin-arm64.tar.gz` always gives the latest release.
 
-The binaries are not signed or notarized. A download with `curl` has no quarantine attribute, so macOS runs it. A download with a web browser needs `xattr -d com.apple.quarantine cwatch`.
+The binaries are not signed or notarised. A download with `curl` has no quarantine attribute, so macOS runs it. A download with a web browser needs `xattr -d com.apple.quarantine cwatch`.
 
 To test the packaging locally, run `make package VERSION=0.0.0-test`.
 
@@ -116,6 +116,7 @@ Uninstall removes only the handlers that cwatch owns. It removes a matcher group
 | `cwatch list --json` | Print versioned JSON (`schema_version: 1`). |
 | `cwatch list --all` | Include ended instances. |
 | `cwatch focus <id>` | Focus the iTerm2 pane of an instance. A unique prefix of the ID is sufficient. |
+| `cwatch summary yesterday\|week [--refresh]` | Print a bullet list of your work of yesterday or last week. See [Summary](#summary). |
 | `cwatch setup [--dry-run]` | Install the hooks. |
 | `cwatch uninstall [--dry-run]` | Remove the hooks. Keep the history. |
 | `cwatch doctor` | Check the platform, executable, settings, hooks, state, iTerm2, and Claude Code version. |
@@ -135,6 +136,7 @@ Exit codes: `0` success, `1` error, `2` usage error, `3` focus refused because t
 | `/` | Filter by project, directory, branch, state, TTY, or ID. `Enter` keeps the filter. `Esc` clears it. |
 | `→` or `d` | Show details: full path, identifiers, excerpts, and recent events. `d` also closes them. |
 | `←` or `Esc` | Close the details. |
+| `s` | Open the summary menu. Push `y`, `w`, or `Enter` to select a range. In the summary, `↑`/`↓` and `PgUp`/`PgDn` scroll, `r` makes the summary again, and `←` or `Esc` closes it. |
 | `a` | Show or hide ended instances. |
 | `r` | Refresh now. |
 | `q`, `Ctrl+C` | Quit. |
@@ -205,18 +207,41 @@ The dashboard and `list` read the usage, never the hook. The dashboard keeps the
 
 Limits: Claude Code writes the transcript asynchronously, so the values can be a few seconds late. After `/compact` or `/clear`, the context size drops, but the totals keep counting. The transcript format is internal to Claude Code and can change. When cwatch finds no usage, it shows `—`.
 
+## Summary
+
+`cwatch summary` and the `s` key make a summary of a past range. The ranges use local time:
+
+- `yesterday`: from 00:00 of the previous day to 00:00 of today.
+- `week`: from Monday 00:00 of the previous week to Monday 00:00 of this week.
+
+The summary has two sections. **Done** lists the finished work. **Open** lists the work that was not finished at the end of the range. Claude decides each item from the digest. An item in **Open** can be finished after the range, and the summary cannot show that.
+
+cwatch does these steps:
+
+1. It reads the transcripts in `~/.claude/projects/*/*.jsonl` (or `$CLAUDE_CONFIG_DIR/projects`). It skips files that did not change after the range starts, subagent transcripts, sidechain and meta records, and lines longer than 8 MiB.
+2. It keeps the records in the range: the typed prompts, the AI title, the last Claude reply (at most 600 characters), the edited files (`Edit`, `Write`, `MultiEdit`, `NotebookEdit`), and the number of tool calls. It does not keep tool output.
+3. It groups the sessions by repository root. For each repository, it runs `git log --all` for the commits of `user.email` in the range, with a timeout of 5 seconds.
+4. It makes a digest of at most 200 KB (`internal/summary`).
+5. It runs `claude -p "<instruction>" --no-session-persistence --tools "" --output-format text` in `~/.cwatch/summaries`, and sends the digest on stdin. The call has no tools and saves no transcript. The timeout is 3 minutes.
+6. It stores the result in `~/.cwatch/summaries/<range>-<start date>.v<format>.md` and deletes results older than 60 days. When the form of the summary changes, `FormatVersion` in `internal/summary/digest.go` increases. Then cwatch does not use the stored results of the older form.
+
+If no session has records in the range, cwatch does not start `claude`.
+
+CAUTION: The child `claude` process starts the cwatch hooks. cwatch sets `CWATCH_DISABLE=1` for the child, and the hook does nothing when this variable is set. A hook binary older than this feature ignores the variable. Run `make setup` again after you update cwatch.
+
 ## Storage and privacy
 
 - The state directory is `~/.cwatch/` (mode 0700). The database is `~/.cwatch/cwatch.db` (mode 0600).
 - The store is SQLite in WAL mode with the pure-Go driver `modernc.org/sqlite`. Each hook writes the event and the updated instance in one `BEGIN IMMEDIATE` transaction. The busy timeout is 3 seconds. A lock error that SQLite returns without a wait gets a bounded retry.
-- cwatch stores normalized event fields only: event name, tool name, tool-use ID, agent ID, notification type, and error type. It does not store tool input, tool output, the environment, or the raw hook payload.
+- cwatch stores normalised event fields only: event name, tool name, tool-use ID, agent ID, notification type, and error type. It does not store tool input, tool output, the environment, or the raw hook payload.
 - cwatch stores the latest prompt (at most 1,000 characters) and the latest final response text from `Stop` (at most 2,000 characters). These excerpts can contain sensitive text. They stay on this computer. Use `cwatch setup --no-excerpts` to store none, and `--no-excerpts` on `list` or the dashboard to show none.
 - The details view reads at most the last 256 KiB of the transcript. It reads the transcript as data only.
 - cwatch removes control characters and ANSI escape sequences from all text before it stores or shows that text.
 - Retention: `list` and the dashboard delete events older than 14 days, keep at most 50,000 events, and delete ended instances older than 30 days. The hook never deletes data.
+- `cwatch summary` sends a digest to Claude through `claude -p`. The digest has your prompts (at most 300 characters each), the AI titles, the last Claude reply of each session (at most 600 characters), the paths of the edited files, and the commit subjects. The other commands make no model calls.
 - Hook errors go to stderr (the Claude Code debug log) and to `~/.cwatch/hook-errors.log` (at most about 256 KiB, one rotated copy).
 
-## Hook behavior
+## Hook behaviour
 
 The hook reads at most 4 MiB from stdin. It discards the rest. It stops after 3 seconds. It always exits with code 0 and writes nothing to stdout, so it never blocks Claude Code, never adds context, and never makes a permission decision. It ignores unknown events and unknown fields. Set `CWATCH_DEBUG=1` to log ignored events.
 
@@ -228,7 +253,7 @@ Measured on the development Mac (Apple silicon, macOS 15.5), with the release bu
 | 8 concurrent hook processes, 2 shared instances | 16.2 ms | 24.4 ms | 79.8 ms |
 | Process start only (`cwatch version`) | 8.7 ms | 11.7 ms | 13.4 ms |
 
-These values include process start. Most of the time is process start and the initialization of the SQLite driver. The values on other computers can be different.
+These values include process start. Most of the time is process start and the initialisation of the SQLite driver. The values on other computers can be different.
 
 ## Known limitations
 
@@ -248,11 +273,12 @@ These values include process start. Most of the time is process start and the in
 | Package | Function |
 |---|---|
 | `cmd/cwatch` | Command dispatch and version. The hook path comes first. |
-| `internal/hooks` | Hook input parser and event normalization. |
+| `internal/hooks` | Hook input parser and event normalisation. |
 | `internal/state` | Instance model, pure reducer, SQLite store, and reconciliation. |
 | `internal/process` | Owner discovery and liveness with `sysctl`. |
 | `internal/terminal` | Terminal detection and the iTerm2 adapter. |
 | `internal/transcript` | Bounded transcript tail reader and incremental token usage reader. |
+| `internal/summary` | Summary ranges, transcript collection, and the digest for the model. |
 | `internal/textutil` | Text sanitation and truncation. |
 | `internal/gitinfo` | Branch name from `.git/HEAD`, without `git`. |
 | `internal/setup` | Settings editor that keeps key order. |

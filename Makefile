@@ -11,7 +11,7 @@
 #   NO_EXCERPTS=1    Do not store prompt or response excerpts.
 #   SETTINGS=FILE    Claude Code settings file (default: cwatch default).
 
-VERSION ?= 0.1.0
+VERSION ?= 0.2.0
 LDFLAGS := -s -w -X main.version=$(VERSION)
 
 ARCH := $(shell uname -m | sed 's/x86_64/amd64/')

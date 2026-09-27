@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"cwatch/internal/process"
+	"cwatch/internal/summary"
 	"cwatch/internal/terminal"
 	"cwatch/internal/transcript"
 )
@@ -43,6 +44,10 @@ type Env struct {
 	// Usage reads token usage from transcripts. The dashboard keeps one
 	// tracker, so each refresh reads only new transcript lines.
 	Usage *transcript.UsageTracker
+	// Summarizer makes the summary text. Nil means "claude -p".
+	Summarizer Summarizer
+	// Commits lists the commits of the user for a summary. Nil means none.
+	Commits summary.CommitFunc
 }
 
 // DefaultEnv returns an Env for the real system.
@@ -56,6 +61,7 @@ func DefaultEnv() *Env {
 		Getenv:     os.Getenv,
 		Executable: ResolvedExecutable,
 		Usage:      transcript.NewUsageTracker(),
+		Commits:    summary.GitCommits,
 	}
 }
 
@@ -89,7 +95,7 @@ func DefaultStateDir(getenv func(string) string) (string, error) {
 }
 
 // DefaultSettingsFile returns the user settings file of Claude Code. It
-// honors CLAUDE_CONFIG_DIR.
+// honours CLAUDE_CONFIG_DIR.
 func DefaultSettingsFile(getenv func(string) string) (string, error) {
 	if dir := getenv("CLAUDE_CONFIG_DIR"); dir != "" {
 		return filepath.Join(dir, "settings.json"), nil

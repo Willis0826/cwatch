@@ -4,19 +4,23 @@ package main
 
 import (
 	"context"
+	"errors"
 	"flag"
 	"fmt"
 	"io"
 	"os"
+	"os/signal"
 	"runtime"
 	"runtime/debug"
 	"strings"
+	"syscall"
 	"time"
 
 	"golang.org/x/term"
 
 	"cwatch/internal/app"
 	"cwatch/internal/process"
+	"cwatch/internal/summary"
 	"cwatch/internal/tui"
 )
 
@@ -29,6 +33,9 @@ Usage:
   cwatch [flags]                   Open the dashboard (no implicit setup)
   cwatch list [--json] [--all]     List tracked instances
   cwatch focus <instance-id>       Focus the iTerm2 pane of an instance
+  cwatch summary yesterday|week [--refresh]
+                                   Summarise your work of yesterday or last week
+                                   with "claude -p"
   cwatch setup [--dry-run]         Install the cwatch hooks
   cwatch uninstall [--dry-run]     Remove the cwatch hooks; keep the history
   cwatch doctor                    Check configuration and tracking
@@ -68,6 +75,24 @@ func splitCommand(args []string) (string, []string) {
 	return "", args
 }
 
+// parseInterspersed parses flags that come before or after the arguments,
+// as in "cwatch summary week --refresh". After the call, fs.Args holds the
+// arguments.
+func parseInterspersed(fs *flag.FlagSet, args []string) error {
+	var pos []string
+	for {
+		if err := fs.Parse(args); err != nil {
+			return err
+		}
+		if fs.NArg() == 0 {
+			break
+		}
+		pos = append(pos, fs.Arg(0))
+		args = fs.Args()[1:]
+	}
+	return fs.Parse(append([]string{"--"}, pos...))
+}
+
 type common struct {
 	stateDir     string
 	settingsFile string
@@ -88,13 +113,15 @@ func run(args []string, stdout, stderr io.Writer) int {
 	cmd, rest := splitCommand(args)
 	var c common
 	fs := newFlags(cmd, stderr, &c)
-	var jsonOut, all, dryRun bool
+	var jsonOut, all, dryRun, refresh bool
 	switch cmd {
 	case "list":
 		fs.BoolVar(&jsonOut, "json", false, "JSON output")
 		fs.BoolVar(&all, "all", false, "include ended instances")
 	case "", "dashboard":
 		fs.BoolVar(&all, "all", false, "include ended instances")
+	case "summary":
+		fs.BoolVar(&refresh, "refresh", false, "make the summary again")
 	case "setup", "uninstall":
 		fs.BoolVar(&dryRun, "dry-run", false, "show the changes only")
 	case "help", "-h", "--help":
@@ -108,7 +135,7 @@ func run(args []string, stdout, stderr io.Writer) int {
 		fmt.Fprintf(stderr, "cwatch: unknown command %q\n\n%s", cmd, usage)
 		return app.ExitUsage
 	}
-	if err := fs.Parse(rest); err != nil {
+	if err := parseInterspersed(fs, rest); err != nil {
 		if err == flag.ErrHelp {
 			return app.ExitOK
 		}
@@ -173,6 +200,9 @@ func run(args []string, stdout, stderr io.Writer) int {
 		}
 		return env.FocusCommand(ctx, fs.Arg(0))
 
+	case "summary":
+		return summaryCommand(ctx, env, fs.Args(), refresh)
+
 	case "setup":
 		return env.Setup(app.SetupOptions{DryRun: dryRun, NoExcerpts: c.noExcerpts})
 
@@ -183,6 +213,38 @@ func run(args []string, stdout, stderr io.Writer) int {
 		return env.Doctor(ctx)
 	}
 	return app.ExitUsage
+}
+
+func summaryCommand(ctx context.Context, env *app.Env, args []string, refresh bool) int {
+	if len(args) != 1 {
+		fmt.Fprintf(env.Stderr, "cwatch: summary needs one range: %q or %q\n", summary.KindYesterday, summary.KindWeek)
+		return app.ExitUsage
+	}
+	r, err := summary.Parse(args[0], env.Now())
+	if err != nil {
+		fmt.Fprintln(env.Stderr, "cwatch:", err)
+		return app.ExitUsage
+	}
+	if !refresh {
+		if text, ok := env.CachedSummary(r); ok {
+			fmt.Fprint(env.Stdout, text)
+			return app.ExitOK
+		}
+	}
+	ctx, stop := signal.NotifyContext(ctx, os.Interrupt, syscall.SIGTERM)
+	defer stop()
+	fmt.Fprintf(env.Stderr, "Summarising %s…\n", r.Label())
+	text, _, err := env.Summary(ctx, r, true)
+	switch {
+	case errors.Is(err, app.ErrNoActivity):
+		fmt.Fprintf(env.Stdout, "No Claude Code activity in %s.\n", r.Label())
+		return app.ExitOK
+	case err != nil:
+		fmt.Fprintln(env.Stderr, "cwatch:", err)
+		return app.ExitError
+	}
+	fmt.Fprint(env.Stdout, text)
+	return app.ExitOK
 }
 
 func versionString() string {

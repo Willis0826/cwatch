@@ -69,6 +69,8 @@ type Model struct {
 	messageErr  bool
 	focusActive bool
 
+	sum summaryState
+
 	dark  bool
 	theme theme
 }
@@ -242,6 +244,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		return m, nil
 
+	case summaryMsg:
+		return m.summaryResult(msg), nil
+
 	case tea.KeyPressMsg:
 		return m.key(msg)
 	}
@@ -251,7 +256,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 func (m Model) key(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	k := msg.String()
 	if k == "ctrl+c" {
-		return m, tea.Quit
+		return m.closeSummary(), tea.Quit
+	}
+	if m.sum.mode != summaryOff {
+		return m.summaryKey(k)
 	}
 	if m.filtering {
 		switch k {
@@ -311,6 +319,9 @@ func (m Model) key(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		}
 	case "left":
 		m.details = false
+	case "s":
+		m.sum.mode = summaryMenu
+		m.message = ""
 	case "a":
 		m.opts.All = !m.opts.All
 		m.loading = true
@@ -343,39 +354,47 @@ func indent(s, p string) string {
 	return p + strings.ReplaceAll(s, "\n", "\n"+p)
 }
 
-// wrap breaks s into lines of at most w runes. It sanitizes s first.
+// wrap breaks s into lines of at most w runes and keeps at most 12 lines.
+// It sanitises s first.
 func wrap(s string, w int) string {
-	if w < 10 {
-		w = 10
-	}
 	var out []string
 	for _, para := range strings.Split(textutil.Sanitize(s, true), "\n") {
-		line := ""
-		for _, word := range strings.Fields(para) {
-			for len([]rune(word)) > w {
-				r := []rune(word)
-				if line != "" {
-					out = append(out, line)
-					line = ""
-				}
-				out = append(out, string(r[:w]))
-				word = string(r[w:])
-			}
-			switch {
-			case line == "":
-				line = word
-			case len([]rune(line))+1+len([]rune(word)) <= w:
-				line += " " + word
-			default:
-				out = append(out, line)
-				line = word
-			}
-		}
-		out = append(out, line)
+		out = append(out, wrapPara(para, w)...)
 	}
 	for len(out) > 12 {
 		out = out[:12]
 		out[11] += " …"
 	}
 	return strings.Join(out, "\n")
+}
+
+// wrapPara breaks one paragraph into lines of at most w runes. An empty
+// paragraph gives one empty line.
+func wrapPara(para string, w int) []string {
+	if w < 10 {
+		w = 10
+	}
+	var out []string
+	line := ""
+	for _, word := range strings.Fields(para) {
+		for len([]rune(word)) > w {
+			r := []rune(word)
+			if line != "" {
+				out = append(out, line)
+				line = ""
+			}
+			out = append(out, string(r[:w]))
+			word = string(r[w:])
+		}
+		switch {
+		case line == "":
+			line = word
+		case len([]rune(line))+1+len([]rune(word)) <= w:
+			line += " " + word
+		default:
+			out = append(out, line)
+			line = word
+		}
+	}
+	return append(out, line)
 }

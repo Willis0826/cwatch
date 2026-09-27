@@ -501,7 +501,7 @@ func (s *Store) Events(ctx context.Context, instanceID string, limit int) ([]Eve
 	return out, rows.Err()
 }
 
-// Stats summarizes the store for diagnostics.
+// Stats summarises the store for diagnostics.
 type Stats struct {
 	Instances   int
 	Events      int

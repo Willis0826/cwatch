@@ -42,7 +42,7 @@ func hookEnv() []string {
 	for _, kv := range os.Environ() {
 		k := kv[:strings.IndexByte(kv+"=", '=')]
 		switch k {
-		case "ITERM_SESSION_ID", "TMUX", "CLAUDE_PID", "SSH_CONNECTION", "SSH_TTY":
+		case "ITERM_SESSION_ID", "TMUX", "CLAUDE_PID", "SSH_CONNECTION", "SSH_TTY", "CWATCH_DISABLE":
 			continue
 		}
 		env = append(env, kv)
@@ -202,12 +202,34 @@ func TestListJSONAfterHooks(t *testing.T) {
 }
 
 func TestUsageErrors(t *testing.T) {
-	for _, args := range [][]string{{"bogus"}, {"focus"}, {"list", "--nope"}} {
+	for _, args := range [][]string{{"bogus"}, {"focus"}, {"list", "--nope"}, {"summary"}, {"summary", "month"}, {"summary", "yesterday", "week"}} {
 		err := exec.Command(binPath, args...).Run()
 		ee, ok := err.(*exec.ExitError)
 		if !ok || ee.ExitCode() != 2 {
 			t.Errorf("%v: %v", args, err)
 		}
+	}
+}
+
+func TestSummaryWithoutActivityAndFromCache(t *testing.T) {
+	cfg, dir := t.TempDir(), t.TempDir()
+	run := func(args ...string) (string, error) {
+		cmd := exec.Command(binPath, append(args, "--state-dir", dir)...)
+		cmd.Env = append(hookEnv(), "CLAUDE_CONFIG_DIR="+cfg)
+		out, err := cmd.Output()
+		return string(out), err
+	}
+	// No transcripts: cwatch does not start claude.
+	out, err := run("summary", "week")
+	if err != nil || !strings.HasPrefix(out, "No Claude Code activity in last week") {
+		t.Fatalf("%q %v", out, err)
+	}
+	// A stored summary prints without a model call.
+	name := "yesterday-" + time.Now().AddDate(0, 0, -1).Format("2006-01-02") + ".v2.md"
+	os.MkdirAll(filepath.Join(dir, "summaries"), 0o700)
+	os.WriteFile(filepath.Join(dir, "summaries", name), []byte("- stored\n"), 0o600)
+	if out, err := run("summary", "yesterday"); err != nil || out != "- stored\n" {
+		t.Fatalf("%q %v", out, err)
 	}
 }
 
