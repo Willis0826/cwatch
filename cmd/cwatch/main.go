@@ -10,6 +10,7 @@ import (
 	"io"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"runtime"
 	"runtime/debug"
 	"strings"
@@ -19,6 +20,7 @@ import (
 	"golang.org/x/term"
 
 	"cwatch/internal/app"
+	"cwatch/internal/menubar"
 	"cwatch/internal/process"
 	"cwatch/internal/summary"
 	"cwatch/internal/tui"
@@ -38,8 +40,11 @@ Usage:
                                    with "claude -p"
   cwatch upgrade [--check] [--force]
                                    Install the latest release in place of this binary
-  cwatch setup [--dry-run]         Install the cwatch hooks
-  cwatch uninstall [--dry-run]     Remove the cwatch hooks; keep the history
+  cwatch menubar                   Show the sessions in the macOS menu bar
+  cwatch setup [--dry-run] [--no-menubar]
+                                   Install the cwatch hooks and the menu bar agent
+  cwatch uninstall [--dry-run]     Remove the cwatch hooks and the menu bar agent;
+                                   keep the history
   cwatch doctor                    Check configuration and tracking
   cwatch hook                      Internal: read one Claude Code hook event from stdin
   cwatch version                   Show the version
@@ -115,7 +120,7 @@ func run(args []string, stdout, stderr io.Writer) int {
 	cmd, rest := splitCommand(args)
 	var c common
 	fs := newFlags(cmd, stderr, &c)
-	var jsonOut, all, dryRun, refresh, check, force bool
+	var jsonOut, all, dryRun, refresh, check, force, noMenubar bool
 	switch cmd {
 	case "list":
 		fs.BoolVar(&jsonOut, "json", false, "JSON output")
@@ -127,7 +132,10 @@ func run(args []string, stdout, stderr io.Writer) int {
 	case "upgrade":
 		fs.BoolVar(&check, "check", false, "only compare the versions")
 		fs.BoolVar(&force, "force", false, "replace a development build or the same version")
-	case "setup", "uninstall":
+	case "setup":
+		fs.BoolVar(&dryRun, "dry-run", false, "show the changes only")
+		fs.BoolVar(&noMenubar, "no-menubar", false, "do not install the menu bar agent")
+	case "uninstall":
 		fs.BoolVar(&dryRun, "dry-run", false, "show the changes only")
 	case "help", "-h", "--help":
 		fmt.Fprint(stdout, usage)
@@ -135,7 +143,7 @@ func run(args []string, stdout, stderr io.Writer) int {
 	case "version":
 		fmt.Fprintln(stdout, versionString())
 		return app.ExitOK
-	case "focus", "doctor":
+	case "focus", "doctor", "menubar":
 	default:
 		fmt.Fprintf(stderr, "cwatch: unknown command %q\n\n%s", cmd, usage)
 		return app.ExitUsage
@@ -150,6 +158,7 @@ func run(args []string, stdout, stderr io.Writer) int {
 	env := app.DefaultEnv()
 	env.Stdout, env.Stderr = stdout, stderr
 	env.StateDir, env.SettingsFile = c.stateDir, c.settingsFile
+	env.MenubarSupported = menubar.Supported
 	if err := env.Resolve(); err != nil {
 		fmt.Fprintln(stderr, "cwatch:", err)
 		return app.ExitError
@@ -217,8 +226,15 @@ func run(args []string, stdout, stderr io.Writer) int {
 		defer stop()
 		return env.Upgrade(ctx, app.UpgradeOptions{Current: version, Check: check, Force: force})
 
+	case "menubar":
+		if fs.NArg() > 0 {
+			fmt.Fprintf(stderr, "cwatch: unexpected argument %q\n", fs.Arg(0))
+			return app.ExitUsage
+		}
+		return menubarCommand(env)
+
 	case "setup":
-		return env.Setup(app.SetupOptions{DryRun: dryRun, NoExcerpts: c.noExcerpts})
+		return env.Setup(app.SetupOptions{DryRun: dryRun, NoExcerpts: c.noExcerpts, Menubar: !noMenubar})
 
 	case "uninstall":
 		return env.Uninstall(dryRun)
@@ -258,6 +274,35 @@ func summaryCommand(ctx context.Context, env *app.Env, args []string, refresh bo
 		return app.ExitError
 	}
 	fmt.Fprint(env.Stdout, text)
+	return app.ExitOK
+}
+
+// menubarCommand shows the menu bar. A lock file in the state directory
+// makes sure that only one menu bar runs for a state directory.
+func menubarCommand(env *app.Env) int {
+	if !menubar.Supported {
+		fmt.Fprintln(env.Stderr, "cwatch:", menubar.Run(env))
+		return app.ExitError
+	}
+	if err := os.MkdirAll(env.StateDir, 0o700); err != nil {
+		fmt.Fprintln(env.Stderr, "cwatch:", err)
+		return app.ExitError
+	}
+	lock, err := os.OpenFile(filepath.Join(env.StateDir, "menubar.lock"), os.O_RDWR|os.O_CREATE, 0o600)
+	if err != nil {
+		fmt.Fprintln(env.Stderr, "cwatch:", err)
+		return app.ExitError
+	}
+	defer lock.Close()
+	if err := syscall.Flock(int(lock.Fd()), syscall.LOCK_EX|syscall.LOCK_NB); err != nil {
+		// Exit 0, so that launchd does not start the agent again and again.
+		fmt.Fprintln(env.Stderr, "cwatch: the menu bar already runs")
+		return app.ExitOK
+	}
+	if err := menubar.Run(env); err != nil {
+		fmt.Fprintln(env.Stderr, "cwatch:", err)
+		return app.ExitError
+	}
 	return app.ExitOK
 }
 

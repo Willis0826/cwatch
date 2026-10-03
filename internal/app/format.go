@@ -25,6 +25,42 @@ func StateLabel(in state.Instance) string {
 	return s
 }
 
+// StateIcon returns the emoji of a state.
+func StateIcon(st state.State) string {
+	switch st {
+	case state.NeedsPermission:
+		return "🟡"
+	case state.Working:
+		return "🟢"
+	case state.Running:
+		return "🔵"
+	case state.Idle:
+		return "⚪"
+	case state.Error:
+		return "🔴"
+	case state.Ended:
+		return "⚫"
+	}
+	return "❔"
+}
+
+// StateCounts counts the instances by state, for example "🟡1 🟢2 ⚪1".
+// The states that need attention come first. Ended instances are not
+// counted. The result is empty when no instance is live.
+func StateCounts(list []state.Instance) string {
+	counts := map[state.State]int{}
+	for _, in := range list {
+		counts[in.State]++
+	}
+	var parts []string
+	for _, st := range []state.State{state.NeedsPermission, state.Error, state.Working, state.Running, state.Idle} {
+		if n := counts[st]; n > 0 {
+			parts = append(parts, fmt.Sprintf("%s%d", StateIcon(st), n))
+		}
+	}
+	return strings.Join(parts, " ")
+}
+
 // Activity returns the current tool or the latest message excerpt. Quoted
 // text is an excerpt of a real message, not a summary.
 func Activity(in state.Instance, excerpts bool) string {

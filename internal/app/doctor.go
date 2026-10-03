@@ -172,6 +172,9 @@ func (e *Env) Doctor(ctx context.Context) int {
 		add("WARN", "terminal", "this shell runs inside tmux; focus of tmux panes is not supported")
 	}
 
+	// Menu bar.
+	e.doctorMenubar(ctx, exe, add)
+
 	// Claude Code.
 	if v, err := claudeVersion(ctx); err != nil {
 		add("WARN", "claude code", "cannot read the version: %v", err)

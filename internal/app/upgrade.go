@@ -169,6 +169,7 @@ func (e *Env) Upgrade(ctx context.Context, o UpgradeOptions) int {
 	}
 	fmt.Fprintf(e.Stdout, "Upgraded cwatch from %s to %s at %s.\n", o.Current, latest, exe)
 	fmt.Fprintln(e.Stdout, "The hooks use the same path, so you do not need to run setup again.")
+	e.restartMenubar(ctx)
 	return ExitOK
 }
 

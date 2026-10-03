@@ -268,7 +268,7 @@ func TestSetupMalformedSettingsUnchanged(t *testing.T) {
 }
 
 func TestShellQuote(t *testing.T) {
-	got := shellQuote([]string{"/Users/o'neil/My Tools/cwatch", "hook", "--state-dir", "/a b"})
+	got := ShellQuote([]string{"/Users/o'neil/My Tools/cwatch", "hook", "--state-dir", "/a b"})
 	want := `'/Users/o'\''neil/My Tools/cwatch' hook --state-dir '/a b'`
 	if got != want {
 		t.Fatalf("got %s", got)

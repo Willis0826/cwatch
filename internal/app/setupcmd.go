@@ -1,6 +1,7 @@
 package app
 
 import (
+	"context"
 	"fmt"
 	"strings"
 
@@ -11,6 +12,7 @@ import (
 type SetupOptions struct {
 	DryRun     bool
 	NoExcerpts bool
+	Menubar    bool // also install the menu bar agent
 }
 
 func (e *Env) hookConfig(o SetupOptions) (setup.Config, error) {
@@ -22,15 +24,23 @@ func (e *Env) hookConfig(o SetupOptions) (setup.Config, error) {
 	return c, c.Validate()
 }
 
-// Setup installs the hook entries of this tool.
+// Setup installs the hook entries of this tool. With o.Menubar, it also
+// installs the menu bar agent.
 func (e *Env) Setup(o SetupOptions) int {
 	c, err := e.hookConfig(o)
 	if err != nil {
 		fmt.Fprintln(e.Stderr, "cwatch: setup:", err)
 		return ExitError
 	}
+	if code := e.setupHooks(c, o); code != ExitOK || !o.Menubar {
+		return code
+	}
+	return e.setupMenubar(context.Background(), c.Exe, o.DryRun)
+}
+
+func (e *Env) setupHooks(c setup.Config, o SetupOptions) int {
 	fmt.Fprintln(e.Stdout, "Settings file:", e.SettingsFile)
-	fmt.Fprintln(e.Stdout, "Hook command: ", shellQuote(append([]string{c.Exe}, c.Args()...)))
+	fmt.Fprintln(e.Stdout, "Hook command: ", ShellQuote(append([]string{c.Exe}, c.Args()...)))
 	data, info, err := setup.ReadSettings(e.SettingsFile)
 	if err != nil {
 		fmt.Fprintln(e.Stderr, "cwatch: setup: read settings:", err)
@@ -72,8 +82,17 @@ func (e *Env) Setup(o SetupOptions) int {
 	return ExitOK
 }
 
-// Uninstall removes the hook entries of this tool. It keeps the history.
+// Uninstall removes the hook entries and the menu bar agent of this tool.
+// It keeps the history.
 func (e *Env) Uninstall(dryRun bool) int {
+	code := e.uninstallHooks(dryRun)
+	if c := e.uninstallMenubar(context.Background(), dryRun); c != ExitOK {
+		code = c
+	}
+	return code
+}
+
+func (e *Env) uninstallHooks(dryRun bool) int {
 	fmt.Fprintln(e.Stdout, "Settings file:", e.SettingsFile)
 	data, info, err := setup.ReadSettings(e.SettingsFile)
 	if err != nil {
@@ -115,8 +134,8 @@ func (e *Env) Uninstall(dryRun bool) int {
 	return ExitOK
 }
 
-// shellQuote quotes argv for display in a POSIX shell.
-func shellQuote(argv []string) string {
+// ShellQuote quotes argv for a POSIX shell.
+func ShellQuote(argv []string) string {
 	out := ""
 	for i, a := range argv {
 		if i > 0 {

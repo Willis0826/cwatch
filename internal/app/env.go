@@ -11,6 +11,7 @@ import (
 	"path/filepath"
 	"time"
 
+	"cwatch/internal/launchagent"
 	"cwatch/internal/process"
 	"cwatch/internal/summary"
 	"cwatch/internal/terminal"
@@ -51,6 +52,14 @@ type Env struct {
 	// Releases finds and downloads releases for an upgrade. Nil means
 	// GitHub through curl.
 	Releases Releases
+	// Launchctl manages the menu bar agent. Nil means that cwatch does not
+	// touch launchd, as in tests.
+	Launchctl launchagent.Launchctl
+	// LaunchAgentsDir holds the plist of the menu bar agent. Resolve sets
+	// ~/Library/LaunchAgents when Launchctl is set.
+	LaunchAgentsDir string
+	// MenubarSupported tells whether this build can show the menu bar.
+	MenubarSupported bool
 }
 
 // DefaultEnv returns an Env for the real system.
@@ -65,6 +74,7 @@ func DefaultEnv() *Env {
 		Executable: ResolvedExecutable,
 		Usage:      transcript.NewUsageTracker(),
 		Commits:    summary.GitCommits,
+		Launchctl:  launchagent.System{},
 	}
 }
 
@@ -126,6 +136,15 @@ func (e *Env) Resolve() error {
 		if e.SettingsFile, err = DefaultSettingsFile(e.Getenv); err != nil {
 			return err
 		}
+	}
+	if e.LaunchAgentsDir == "" && e.Launchctl != nil {
+		home := e.Getenv("HOME")
+		if home == "" {
+			if home, err = os.UserHomeDir(); err != nil {
+				return err
+			}
+		}
+		e.LaunchAgentsDir = launchagent.DefaultDir(home)
 	}
 	if e.StateDir, err = filepath.Abs(e.StateDir); err != nil {
 		return err

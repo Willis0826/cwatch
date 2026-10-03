@@ -55,21 +55,10 @@ func newTheme(dark bool) theme {
 
 // stateIcon returns the emoji and the label of a state.
 func stateIcon(in state.Instance) (string, string) {
-	switch in.State {
-	case state.NeedsPermission:
-		return "🟡", "permission"
-	case state.Working:
-		return "🟢", "working"
-	case state.Running:
-		return "🔵", "running"
-	case state.Idle:
-		return "⚪", "idle"
-	case state.Error:
-		return "🔴", "error"
-	case state.Ended:
-		return "⚫", "ended"
+	if in.State == state.NeedsPermission {
+		return app.StateIcon(in.State), "permission"
 	}
-	return "❔", string(in.State)
+	return app.StateIcon(in.State), string(in.State)
 }
 
 func (t theme) stateColor(in state.Instance) color.Color {
@@ -253,23 +242,11 @@ func (m Model) windowTitle() string {
 	if !m.loaded {
 		return "cwatch"
 	}
-	counts := map[state.State]int{}
-	for _, in := range m.snap.Instances {
-		counts[in.State]++
-	}
-	var parts []string
-	for _, c := range []struct {
-		st   state.State
-		icon string
-	}{{state.NeedsPermission, "🟡"}, {state.Error, "🔴"}, {state.Working, "🟢"}, {state.Running, "🔵"}, {state.Idle, "⚪"}} {
-		if n := counts[c.st]; n > 0 {
-			parts = append(parts, fmt.Sprintf("%s%d", c.icon, n))
-		}
-	}
-	if len(parts) == 0 {
+	counts := app.StateCounts(m.snap.Instances)
+	if counts == "" {
 		return "cwatch · no sessions"
 	}
-	return strings.Join(parts, " ") + " · cwatch"
+	return counts + " · cwatch"
 }
 
 // renderWidth returns the width that the dashboard uses for a terminal

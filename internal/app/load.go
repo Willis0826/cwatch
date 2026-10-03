@@ -35,8 +35,9 @@ type Snapshot struct {
 
 // LoadOptions select what Load returns.
 type LoadOptions struct {
-	All   bool // include ended instances
-	Prune bool // delete old history
+	All      bool // include ended instances
+	Prune    bool // delete old history
+	NoTokens bool // do not read token usage from the transcripts
 }
 
 // Load reads, reconciles, and sorts the instances. It creates no files
@@ -80,7 +81,7 @@ func (e *Env) Load(ctx context.Context, o LoadOptions) Snapshot {
 		if in.Cwd != "" {
 			in.Branch = branches.Get(in.Cwd)
 		}
-		if in.TranscriptPath != "" {
+		if in.TranscriptPath != "" && !o.NoTokens {
 			keep[in.TranscriptPath] = true
 			if u, err := usage.Update(in.TranscriptPath); err == nil && u.Responses > 0 {
 				in.Tokens = &u

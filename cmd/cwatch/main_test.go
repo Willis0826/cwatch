@@ -25,7 +25,7 @@ func TestMain(m *testing.M) {
 	}
 	binPath = filepath.Join(dir, "cwatch")
 	build := exec.Command("go", "build", "-o", binPath, ".")
-	build.Env = append(os.Environ(), "CGO_ENABLED=0")
+	build.Env = append(os.Environ(), "CGO_ENABLED=1")
 	if out, err := build.CombinedOutput(); err != nil {
 		fmt.Fprintf(os.Stderr, "build failed: %v\n%s", err, out)
 		os.Exit(1)

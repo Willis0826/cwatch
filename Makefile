@@ -1,18 +1,24 @@
-# Build and install targets for cwatch. All builds use CGO_ENABLED=0.
+# Build and install targets for cwatch. All builds use CGO_ENABLED=1,
+# because the menu bar calls the macOS AppKit framework.
 #
-#   make setup       Install the binary, show the hook changes, install the
-#                    hooks after confirmation, then run doctor.
-#   make uninstall   Remove the hooks and the binary. Keep the history.
+#   make setup       Install the binary, show the hook and menu bar changes,
+#                    install them after confirmation, then run doctor.
+#   make uninstall   Remove the hooks, the menu bar, and the binary. Keep the
+#                    history.
 #
 # Variables:
 #   BINDIR=DIR       Install directory. Default: /opt/homebrew/bin, else
 #                    /usr/local/bin, else ~/.local/bin (first writable one).
 #   YES=1            Do not ask for confirmation before the hook install.
 #   NO_EXCERPTS=1    Do not store prompt or response excerpts.
+#   NO_MENUBAR=1     Do not install the menu bar agent.
 #   SETTINGS=FILE    Claude Code settings file (default: cwatch default).
 
-VERSION ?= 0.4.0
+VERSION ?= 0.5.0
 LDFLAGS := -s -w -X main.version=$(VERSION)
+
+# The oldest macOS that the binaries support. Go itself needs macOS 13.
+export MACOSX_DEPLOYMENT_TARGET := 13.0
 
 ARCH := $(shell uname -m | sed 's/x86_64/amd64/')
 HAVE_GO := $(shell command -v go >/dev/null 2>&1 && echo yes)
@@ -21,13 +27,13 @@ HAVE_GO := $(shell command -v go >/dev/null 2>&1 && echo yes)
 BINDIR ?= $(firstword $(foreach d,/opt/homebrew/bin /usr/local/bin,$(shell test -d $(d) -a -w $(d) && echo $(d))) $(HOME)/.local/bin)
 INSTALLED := $(BINDIR)/cwatch
 
-SETUP_FLAGS := $(if $(NO_EXCERPTS),--no-excerpts) $(if $(SETTINGS),--settings-file "$(SETTINGS)")
+SETUP_FLAGS := $(if $(NO_EXCERPTS),--no-excerpts) $(if $(NO_MENUBAR),--no-menubar) $(if $(SETTINGS),--settings-file "$(SETTINGS)")
 SETTINGS_FLAG := $(if $(SETTINGS),--settings-file "$(SETTINGS)")
 
 .PHONY: build test race vet dist package install hooks-check hooks doctor setup uninstall screenshots clean
 
 build:
-	CGO_ENABLED=0 go build -trimpath -ldflags "$(LDFLAGS)" -o bin/cwatch ./cmd/cwatch
+	CGO_ENABLED=1 go build -trimpath -ldflags "$(LDFLAGS)" -o bin/cwatch ./cmd/cwatch
 
 test:
 	go test ./...
@@ -39,8 +45,8 @@ vet:
 	go vet ./...
 
 dist:
-	CGO_ENABLED=0 GOOS=darwin GOARCH=arm64 go build -trimpath -ldflags "$(LDFLAGS)" -o dist/cwatch-darwin-arm64 ./cmd/cwatch
-	CGO_ENABLED=0 GOOS=darwin GOARCH=amd64 go build -trimpath -ldflags "$(LDFLAGS)" -o dist/cwatch-darwin-amd64 ./cmd/cwatch
+	CGO_ENABLED=1 GOOS=darwin GOARCH=arm64 go build -trimpath -ldflags "$(LDFLAGS)" -o dist/cwatch-darwin-arm64 ./cmd/cwatch
+	CGO_ENABLED=1 GOOS=darwin GOARCH=amd64 go build -trimpath -ldflags "$(LDFLAGS)" -o dist/cwatch-darwin-amd64 ./cmd/cwatch
 
 # Pack the dist/ binaries for a release. Each archive holds one file named
 # cwatch. The asset names have no version, so the "latest" download links
@@ -89,7 +95,7 @@ setup: install
 	@$(MAKE) --no-print-directory hooks-check
 	@echo
 	@if [ "$(YES)" != "1" ]; then \
-		printf "Install these hooks into the Claude Code settings? [y/N] "; \
+		printf "Install these hooks and the menu bar? [y/N] "; \
 		read answer; \
 		case "$$answer" in [yY]|[yY][eE][sS]) ;; *) echo "Stopped. cwatch made no changes to the settings."; exit 1;; esac; \
 	fi

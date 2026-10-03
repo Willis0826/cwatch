@@ -12,7 +12,7 @@ This guide explains how cwatch works, how to build it, and how to test it. For t
 ## Build
 
 ```sh
-make build        # writes bin/cwatch (CGO_ENABLED=0)
+make build        # writes bin/cwatch (CGO_ENABLED=1)
 make dist         # writes dist/cwatch-darwin-arm64 and dist/cwatch-darwin-amd64
 make test         # go test ./...
 make race         # go test -race ./...
@@ -50,9 +50,9 @@ To test the packaging locally, run `make package VERSION=0.0.0-test`.
 This command does these steps:
 
 1. It installs the binary. When Go is available, it builds the binary first. Else it uses the prebuilt `dist/cwatch-darwin-<arch>`. The install directory is the first writable directory of `/opt/homebrew/bin` and `/usr/local/bin`. If neither directory is writable, it uses `~/.local/bin`.
-2. It shows the hook changes (`cwatch setup --dry-run`). This step changes no files. The output shows the target settings file, the hook command, and the new settings content.
+2. It shows the hook and menu bar changes (`cwatch setup --dry-run`). This step changes no files. The output shows the target settings file, the hook command, the new settings content, and the LaunchAgent plist.
 3. It asks for confirmation. If you answer `n`, it stops and changes no settings.
-4. It installs the hooks (`cwatch setup`) with the installed binary. Thus the hooks use the absolute path of the installed binary and do not depend on your shell `PATH`.
+4. It installs the hooks and the menu bar agent (`cwatch setup`) with the installed binary. Thus the hooks and the agent use the absolute path of the installed binary and do not depend on your shell `PATH`.
 5. It runs `cwatch doctor`.
 
 Options:
@@ -62,6 +62,7 @@ Options:
 | `BINDIR=DIR` | Install the binary in `DIR`. |
 | `YES=1` | Do not ask for confirmation. |
 | `NO_EXCERPTS=1` | Store no prompt or response excerpts. |
+| `NO_MENUBAR=1` | Do not install the menu bar agent. |
 | `SETTINGS=FILE` | Edit a different Claude Code settings file. |
 
 Example: `make setup BINDIR=$HOME/.local/bin NO_EXCERPTS=1`.
@@ -78,7 +79,7 @@ The separate steps are also available: `make install`, `make hooks-check`, `make
 
 ## What setup changes
 
-Setup edits only the user settings file of Claude Code: `~/.claude/settings.json`, or `$CLAUDE_CONFIG_DIR/settings.json` when you set that variable. Use `--settings-file` to select a different file. Setup adds one matcher group to each of these events: `SessionStart`, `UserPromptSubmit`, `PreToolUse`, `PostToolUse`, `PostToolUseFailure`, `PermissionRequest`, `Notification`, `Stop`, `StopFailure`, and `SessionEnd`. Each group holds one handler:
+Setup edits only the user settings file of Claude Code: `~/.claude/settings.json`, or `$CLAUDE_CONFIG_DIR/settings.json` when you set that variable. Use `--settings-file` to select a different file. Setup adds one matcher group to each of these events: `SessionStart`, `UserPromptSubmit`, `PreToolUse`, `PostToolUse`, `PostToolUseFailure`, `PermissionRequest`, `Notification`, `Stop`, `StopFailure`, `SubagentStart`, `SubagentStop`, and `SessionEnd`. Each group holds one handler:
 
 ```json
 {
@@ -101,9 +102,26 @@ Setup obeys these rules:
 - A second run makes no change.
 - It finds its own handlers by the `--managed-by=cwatch` argument. It also finds older handlers whose executable is named `cwatch` and whose first argument is `hook`. It finds them at all executable paths, so a moved binary is replaced, not duplicated.
 
+## The menu bar
+
+`cwatch menubar` shows the state in the macOS menu bar. It uses `fyne.io/systray`, which calls AppKit through cgo. For this reason, all builds use `CGO_ENABLED=1` and `MACOSX_DEPLOYMENT_TARGET=13.0`. A build with `CGO_ENABLED=0` still works, but it has no menu bar: `cwatch menubar` fails, and setup skips the agent.
+
+The menu bar reads the state every 2 seconds and each time the menu opens. It reads no transcripts. A lock file (`menubar.lock` in the state directory) makes sure that only one menu bar runs for each state directory.
+
+Setup writes a LaunchAgent to `~/Library/LaunchAgents/io.github.willis0826.cwatch.menubar.plist` and loads it with `launchctl bootstrap gui/<uid>`. The agent has these properties:
+
+- `RunAtLoad`: it starts at login.
+- `KeepAlive` with `SuccessfulExit` false: launchd starts it again after a crash, but not after **Quit the menu bar**.
+- `LimitLoadToSessionType` `Aqua`: it runs only in a graphical login session.
+- The output goes to `menubar.log` in the state directory.
+
+Setup loads the agent again only when the plist changed or the agent does not run. `cwatch upgrade` restarts the agent with `launchctl kickstart -k`. Uninstall runs `launchctl bootout` and deletes the plist. `cwatch doctor` reports whether the agent is installed, matches the binary, and runs.
+
+The cgo build links AppKit. This adds approximately 5 ms to the start of each hook event.
+
 ## What `make uninstall` does
 
-`make uninstall` runs `cwatch uninstall` with the installed binary. If that binary does not exist, it uses `bin/cwatch` or `dist/cwatch-darwin-<arch>`. Any cwatch binary can remove the hooks, because uninstall finds the cwatch hooks at all executable paths. Then it deletes the installed binary.
+`make uninstall` runs `cwatch uninstall` with the installed binary. If that binary does not exist, it uses `bin/cwatch` or `dist/cwatch-darwin-<arch>`. Any cwatch binary can remove the hooks, because uninstall finds the cwatch hooks at all executable paths. Uninstall also stops the menu bar and deletes its plist. Then `make uninstall` deletes the installed binary.
 
 Uninstall removes only the handlers that cwatch owns. It removes a matcher group only when that group held only cwatch handlers. It never removes all hooks of an event. It keeps the history in the state directory.
 
@@ -118,8 +136,9 @@ Uninstall removes only the handlers that cwatch owns. It removes a matcher group
 | `cwatch focus <id>` | Focus the iTerm2 pane of an instance. A unique prefix of the ID is sufficient. |
 | `cwatch summary yesterday\|week [--refresh]` | Print a bullet list of your work of yesterday or last week. See [Summary](#summary). |
 | `cwatch upgrade [--check] [--force]` | Install the latest release in place of the running binary. See [Upgrade](#upgrade). |
-| `cwatch setup [--dry-run]` | Install the hooks. |
-| `cwatch uninstall [--dry-run]` | Remove the hooks. Keep the history. |
+| `cwatch menubar` | Show the sessions in the macOS menu bar. The LaunchAgent runs this command. See [The menu bar](#the-menu-bar). |
+| `cwatch setup [--dry-run] [--no-menubar]` | Install the hooks and the menu bar agent. |
+| `cwatch uninstall [--dry-run]` | Remove the hooks and the menu bar agent. Keep the history. |
 | `cwatch doctor` | Check the platform, executable, settings, hooks, state, iTerm2, and Claude Code version. |
 | `cwatch hook` | Internal. Claude Code runs it. It reads one event from stdin. |
 | `cwatch version` | Print the version. |
