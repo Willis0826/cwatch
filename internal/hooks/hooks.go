@@ -10,6 +10,7 @@ import (
 	"encoding/json"
 	"errors"
 	"io"
+	"strings"
 
 	"cwatch/internal/textutil"
 )
@@ -28,6 +29,8 @@ const (
 	KindNotification    Kind = "notification"
 	KindStop            Kind = "stop"
 	KindStopFailure     Kind = "stop_failure"
+	KindSubagentStart   Kind = "subagent_start"
+	KindSubagentStop    Kind = "subagent_stop"
 	KindSessionEnd      Kind = "session_end"
 	KindUnknown         Kind = "unknown"
 )
@@ -43,6 +46,8 @@ var Events = []string{
 	"Notification",
 	"Stop",
 	"StopFailure",
+	"SubagentStart",
+	"SubagentStop",
 	"SessionEnd",
 }
 
@@ -56,6 +61,8 @@ var kindByName = map[string]Kind{
 	"Notification":       KindNotification,
 	"Stop":               KindStop,
 	"StopFailure":        KindStopFailure,
+	"SubagentStart":      KindSubagentStart,
+	"SubagentStop":       KindSubagentStop,
 	"SessionEnd":         KindSessionEnd,
 }
 
@@ -88,9 +95,14 @@ type Event struct {
 	ErrorType        string `json:"error_type,omitempty"`        // StopFailure
 	ErrorDetail      string `json:"error_detail,omitempty"`      // StopFailure or PostToolUseFailure (bounded)
 	IsInterrupt      bool   `json:"is_interrupt,omitempty"`      // PostToolUseFailure
-	Prompt           string `json:"-"`                           // UserPromptSubmit (bounded)
-	AssistantMessage string `json:"-"`                           // Stop (bounded)
-	Truncated        bool   `json:"truncated,omitempty"`         // input exceeded the read limit
+	Background       bool   `json:"background,omitempty"`        // tool_input.run_in_background
+	// TasksDone lists the tool use IDs of background tasks that a
+	// task notification prompt reports as finished.
+	TasksDone          []string `json:"tasks_done,omitempty"`
+	IsTaskNotification bool     `json:"task_notification,omitempty"` // UserPromptSubmit
+	Prompt             string   `json:"-"`                           // UserPromptSubmit (bounded)
+	AssistantMessage   string   `json:"-"`                           // Stop (bounded)
+	Truncated          bool     `json:"truncated,omitempty"`         // input exceeded the read limit
 
 	errorText string
 }
@@ -205,11 +217,71 @@ func assign(ev *Event, key string, raw json.RawMessage) {
 		var b bool
 		_ = json.Unmarshal(raw, &b)
 		ev.IsInterrupt = b
+	case "tool_input":
+		// Keep only the background flag. Discard all other tool input.
+		var in struct {
+			RunInBackground bool `json:"run_in_background"`
+		}
+		_ = json.Unmarshal(raw, &in)
+		ev.Background = in.RunInBackground
 	case "prompt":
-		ev.Prompt = textutil.Bounded(str(raw), MaxPromptExcerpt)
+		p := str(raw)
+		ev.IsTaskNotification, ev.TasksDone = parseTaskNotifications(p)
+		ev.Prompt = textutil.Bounded(p, MaxPromptExcerpt)
 	case "last_assistant_message":
 		ev.AssistantMessage = textutil.Bounded(str(raw), MaxAssistantExcerpt)
 	}
+}
+
+// finalTaskStatus lists the task notification statuses that tell that a
+// background task does not run any more.
+var finalTaskStatus = map[string]bool{
+	"completed": true, "failed": true, "killed": true, "stopped": true,
+	"cancelled": true, "canceled": true, "timeout": true, "timed_out": true,
+	"expired": true, "error": true,
+}
+
+// parseTaskNotifications finds the <task-notification> blocks that Claude
+// Code puts in a prompt when a background task changes. It returns whether
+// the prompt has a block, and the tool use IDs of the tasks that finished.
+func parseTaskNotifications(p string) (bool, []string) {
+	const open, end = "<task-notification>", "</task-notification>"
+	found := false
+	var done []string
+	for {
+		i := strings.Index(p, open)
+		if i < 0 {
+			break
+		}
+		found = true
+		p = p[i+len(open):]
+		block := p
+		if j := strings.Index(p, end); j >= 0 {
+			block, p = p[:j], p[j+len(end):]
+		} else {
+			p = ""
+		}
+		id := textutil.OneLine(tagValue(block, "tool-use-id"), MaxIdentifier)
+		status := strings.ToLower(tagValue(block, "status"))
+		if id != "" && finalTaskStatus[status] && len(done) < 64 {
+			done = append(done, id)
+		}
+	}
+	return found, done
+}
+
+// tagValue returns the trimmed text between <tag> and </tag>.
+func tagValue(s, tag string) string {
+	i := strings.Index(s, "<"+tag+">")
+	if i < 0 {
+		return ""
+	}
+	s = s[i+len(tag)+2:]
+	j := strings.Index(s, "</"+tag+">")
+	if j < 0 {
+		return ""
+	}
+	return strings.TrimSpace(s[:j])
 }
 
 // ReadLimited reads at most limit bytes from r. It then discards the rest

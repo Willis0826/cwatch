@@ -3,6 +3,8 @@
 package state
 
 import (
+	"strconv"
+	"strings"
 	"time"
 
 	"cwatch/internal/transcript"
@@ -19,6 +21,7 @@ type State string
 const (
 	Idle            State = "idle"
 	Working         State = "working"
+	Running         State = "running" // the main turn stopped, background tasks run
 	NeedsPermission State = "needs_permission"
 	Error           State = "error"
 	Ended           State = "ended"
@@ -58,6 +61,21 @@ type Pending struct {
 	Since    time.Time `json:"since"`
 }
 
+// Background task kinds.
+const (
+	TaskSubagent = "subagent"
+	TaskShell    = "shell"
+	TaskMonitor  = "monitor"
+)
+
+// Task is a background task that can run after the main turn stops.
+type Task struct {
+	Kind  string    `json:"kind"`           // subagent, shell, or monitor
+	ID    string    `json:"id"`             // agent ID or tool use ID
+	Name  string    `json:"name,omitempty"` // agent type or tool name
+	Since time.Time `json:"since"`
+}
+
 // Instance is one Claude Code process running one conversation in one
 // terminal. It is not the same as a Claude session ID.
 type Instance struct {
@@ -95,6 +113,7 @@ type Instance struct {
 	LastNotification string    `json:"last_notification,omitempty"`
 	SubagentAt       time.Time `json:"subagent_activity_at,omitempty"`
 	Pending          []Pending `json:"pending_permissions,omitempty"`
+	Background       []Task    `json:"background_tasks,omitempty"`
 
 	ErrorType   string `json:"error_type,omitempty"`
 	ErrorDetail string `json:"error_detail,omitempty"`
@@ -124,16 +143,39 @@ func (in Instance) Live() bool {
 }
 
 // AttentionRank orders instances for display: attention first, then
-// working, then idle, then ended.
+// working, then running, then idle, then ended.
 func (in Instance) AttentionRank() int {
 	switch in.State {
 	case NeedsPermission, Error:
 		return 0
 	case Working:
 		return 1
-	case Idle:
+	case Running:
 		return 2
-	default:
+	case Idle:
 		return 3
+	default:
+		return 4
 	}
+}
+
+// BackgroundSummary counts the background tasks by kind, for example
+// "2 subagents, 1 shell".
+func (in Instance) BackgroundSummary() string {
+	var parts []string
+	for _, kind := range []string{TaskSubagent, TaskShell, TaskMonitor} {
+		n := 0
+		for _, t := range in.Background {
+			if t.Kind == kind {
+				n++
+			}
+		}
+		switch {
+		case n == 1:
+			parts = append(parts, "1 "+kind)
+		case n > 1:
+			parts = append(parts, strconv.Itoa(n)+" "+kind+"s")
+		}
+	}
+	return strings.Join(parts, ", ")
 }

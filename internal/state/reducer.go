@@ -25,6 +25,7 @@ type Meta struct {
 func Reduce(in Instance, ev hooks.Event, m Meta) Instance {
 	out := in
 	out.Pending = append([]Pending(nil), in.Pending...)
+	out.Background = append([]Task(nil), in.Background...)
 	out.LastEvent = ev.HookEventName
 	out.LastEventAt = m.At
 	out.LastSeq = m.Seq
@@ -42,7 +43,10 @@ func Reduce(in Instance, ev hooks.Event, m Meta) Instance {
 	if out.State == Ended {
 		return reduceEnded(out, ev, m)
 	}
+	return settleBackground(reduceLive(out, ev, m))
+}
 
+func reduceLive(out Instance, ev hooks.Event, m Meta) Instance {
 	switch ev.Kind {
 	case hooks.KindSessionStart:
 		// A compaction can start a new SessionStart during a turn. Keep the
@@ -50,6 +54,7 @@ func Reduce(in Instance, ev hooks.Event, m Meta) Instance {
 		if ev.Source != "compact" || out.State == "" {
 			out.State = Idle
 			out.Pending = nil
+			out.Background = nil
 			out.CurrentTool, out.CurrentToolUseID, out.CurrentToolAgent = "", "", ""
 		}
 		out.Reason = ev.Source
@@ -63,7 +68,12 @@ func Reduce(in Instance, ev hooks.Event, m Meta) Instance {
 		out.CurrentTool, out.CurrentToolUseID, out.CurrentToolAgent = "", "", ""
 		out.LastPromptAt = m.At
 		out.LastPromptID = ev.PromptID
-		if m.StoreExcerpts && ev.Prompt != "" {
+		for _, id := range ev.TasksDone {
+			out.Background = removeTask(out.Background, id)
+		}
+		// A task notification is not a prompt from the user. Keep the
+		// excerpt of the last real prompt.
+		if m.StoreExcerpts && ev.Prompt != "" && !ev.IsTaskNotification {
 			out.PromptExcerpt = ev.Prompt
 		}
 
@@ -82,7 +92,7 @@ func Reduce(in Instance, ev hooks.Event, m Meta) Instance {
 			// permission_prompt notification restores the state if a prompt
 			// still waits.
 			out.Pending = removeAgentPending(out.Pending, "")
-			if out.State == Idle || out.State == Error {
+			if out.State == Idle || out.State == Running || out.State == Error {
 				out.Reason = ""
 			}
 			out.State = Working
@@ -109,6 +119,18 @@ func Reduce(in Instance, ev hooks.Event, m Meta) Instance {
 		out.Pending = removePending(out.Pending, ev.ToolName, ev.AgentID, false)
 		if ev.ToolUseID != "" && ev.ToolUseID == out.CurrentToolUseID || ev.ToolUseID == "" && ev.ToolName == out.CurrentTool {
 			out.CurrentTool, out.CurrentToolUseID, out.CurrentToolAgent = "", "", ""
+		}
+		if ev.Kind == hooks.KindPostTool && !ev.IsSubagent() && ev.ToolUseID != "" {
+			// A background shell or monitor of the main thread sends a task
+			// notification prompt when it finishes. A background task of a
+			// subagent reports to the subagent, so it is not tracked.
+			switch {
+			case ev.ToolName == "Monitor":
+				out.Background = addTask(out.Background, Task{Kind: TaskMonitor, ID: ev.ToolUseID, Name: ev.ToolName, Since: m.At})
+			case ev.Background && ev.ToolName != "Agent" && ev.ToolName != "Task":
+				// SubagentStart and SubagentStop track the subagents.
+				out.Background = addTask(out.Background, Task{Kind: TaskShell, ID: ev.ToolUseID, Name: ev.ToolName, Since: m.At})
+			}
 		}
 		if ev.Kind == hooks.KindPostToolFailure {
 			// A failed tool is recorded. Claude can recover from it, so the
@@ -147,10 +169,21 @@ func Reduce(in Instance, ev hooks.Event, m Meta) Instance {
 			}
 		}
 
+	case hooks.KindSubagentStart:
+		out.SubagentAt = m.At
+		if ev.AgentID != "" {
+			out.Background = addTask(out.Background, Task{Kind: TaskSubagent, ID: ev.AgentID, Name: ev.AgentType, Since: m.At})
+		}
+
+	case hooks.KindSubagentStop:
+		out.SubagentAt = m.At
+		out.Background = removeTask(out.Background, ev.AgentID)
+
 	case hooks.KindStop:
 		if ev.IsSubagent() {
 			// A subagent stop never marks the main session idle.
 			out.SubagentAt = m.At
+			out.Background = removeTask(out.Background, ev.AgentID)
 			break
 		}
 		out.State = Idle
@@ -204,6 +237,7 @@ func markEnded(out Instance, reason string, at time.Time) Instance {
 	out.Reason = reason
 	out.EndedAt = at
 	out.Pending = nil
+	out.Background = nil
 	out.CurrentTool, out.CurrentToolUseID, out.CurrentToolAgent = "", "", ""
 	return out
 }
@@ -213,6 +247,44 @@ func MarkProcessExit(in Instance, at time.Time) Instance {
 	out := markEnded(in, ReasonProcessExit, at)
 	out.Liveness = Dead
 	out.UpdatedAt = at
+	return out
+}
+
+// settleBackground makes the idle and running states agree with the
+// background tasks. A session with no main turn is running while a
+// background task runs, and idle when no background task runs.
+func settleBackground(out Instance) Instance {
+	switch {
+	case out.State == Idle && len(out.Background) > 0:
+		out.State = Running
+	case out.State == Running && len(out.Background) == 0:
+		out.State = Idle
+	}
+	if len(out.Background) == 0 {
+		out.Background = nil
+	}
+	return out
+}
+
+func addTask(list []Task, t Task) []Task {
+	for _, q := range list {
+		if q.Kind == t.Kind && q.ID == t.ID {
+			return list
+		}
+	}
+	return append(list, t)
+}
+
+func removeTask(list []Task, id string) []Task {
+	if id == "" {
+		return list
+	}
+	out := list[:0]
+	for _, t := range list {
+		if t.ID != id {
+			out = append(out, t)
+		}
+	}
 	return out
 }
 

@@ -52,6 +52,8 @@ func Activity(in state.Instance, excerpts bool) string {
 			return "you: \"" + textutil.OneLine(in.PromptExcerpt, 200) + "\""
 		}
 		return "responding"
+	case state.Running:
+		return "background: " + in.BackgroundSummary()
 	case state.Error:
 		s := "API error"
 		if in.ErrorType != "" {

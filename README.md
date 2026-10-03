@@ -8,6 +8,7 @@
 
 - 🟡 **permission**: Claude waits for you to approve a tool.
 - 🟢 **working**: Claude works on your prompt.
+- 🔵 **running**: Claude finished the turn, but background subagents, shells, or monitors still run.
 - ⚪ **idle**: Claude finished and waits for your next prompt.
 - 🔴 **error**: the turn stopped because of an API error.
 

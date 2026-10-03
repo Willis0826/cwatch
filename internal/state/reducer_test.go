@@ -21,7 +21,8 @@ func ev(name string, mods ...func(*hooks.Event)) hooks.Event {
 		"PreToolUse": hooks.KindPreTool, "PostToolUse": hooks.KindPostTool,
 		"PostToolUseFailure": hooks.KindPostToolFailure, "PermissionRequest": hooks.KindPermission,
 		"Notification": hooks.KindNotification, "Stop": hooks.KindStop, "StopFailure": hooks.KindStopFailure,
-		"SessionEnd": hooks.KindSessionEnd,
+		"SessionEnd": hooks.KindSessionEnd, "SubagentStart": hooks.KindSubagentStart,
+		"SubagentStop": hooks.KindSubagentStop,
 	}[name]
 	if e.Kind == "" {
 		e.Kind = hooks.KindUnknown
@@ -199,5 +200,73 @@ func TestExcerptsCanBeDisabled(t *testing.T) {
 	in = Reduce(Instance{}, p, Meta{Seq: 1, At: t0, StoreExcerpts: true})
 	if in.PromptExcerpt != "secret" {
 		t.Fatal("excerpt not stored")
+	}
+}
+
+func TestBackgroundSubagentKeepsRunning(t *testing.T) {
+	in := runSteps(t, Instance{}, []step{
+		{ev("UserPromptSubmit"), Working},
+		{ev("PreToolUse", tool("Agent", "t1")), Working},
+		{ev("SubagentStart", agent("a1")), Working},
+		{ev("PostToolUse", tool("Agent", "t1")), Working},
+		{ev("Stop"), Running},
+		{ev("PreToolUse", tool("Read", "t2"), agent("a1")), Running},
+		{ev("PostToolUse", tool("Read", "t2"), agent("a1")), Running},
+		{ev("Notification", notif("idle_prompt")), Running},
+		{ev("SubagentStop", agent("a1")), Idle},
+	})
+	if in.Background != nil {
+		t.Fatalf("background %v after SubagentStop", in.Background)
+	}
+}
+
+func TestForegroundSubagentEndsBeforeStop(t *testing.T) {
+	runSteps(t, Instance{}, []step{
+		{ev("UserPromptSubmit"), Working},
+		{ev("SubagentStart", agent("a1")), Working},
+		{ev("SubagentStop", agent("a1")), Working},
+		{ev("Stop"), Idle},
+	})
+}
+
+func TestBackgroundShellAndMonitor(t *testing.T) {
+	bg := func(e *hooks.Event) { e.Background = true }
+	done := func(ids ...string) func(*hooks.Event) {
+		return func(e *hooks.Event) { e.IsTaskNotification, e.TasksDone, e.Prompt = true, ids, "<task-notification>" }
+	}
+	in := runSteps(t, Instance{}, []step{
+		{ev("UserPromptSubmit", func(e *hooks.Event) { e.Prompt = "build it" }), Working},
+		{ev("PostToolUse", tool("Bash", "t1"), bg), Working},
+		{ev("PostToolUse", tool("Monitor", "t2")), Working},
+		{ev("PostToolUse", tool("Bash", "t3")), Working},
+		// A background shell of a subagent reports to the subagent.
+		{ev("PostToolUse", tool("Bash", "t4"), bg, agent("a1")), Working},
+		{ev("Stop"), Running},
+		{ev("UserPromptSubmit", done("t1")), Working},
+		{ev("Stop"), Running},
+		{ev("UserPromptSubmit", done()), Working},
+		{ev("Stop"), Running},
+		{ev("UserPromptSubmit", done("t2")), Working},
+		{ev("Stop"), Idle},
+	})
+	if in.PromptExcerpt != "build it" {
+		t.Fatalf("prompt excerpt %q, want the user prompt", in.PromptExcerpt)
+	}
+}
+
+func TestBackgroundClearedOnNewSessionAndEnd(t *testing.T) {
+	in := runSteps(t, Instance{}, []step{
+		{ev("UserPromptSubmit"), Working},
+		{ev("SubagentStart", agent("a1")), Working},
+		{ev("Stop"), Running},
+		{ev("SessionStart", func(e *hooks.Event) { e.Source = "compact" }), Running},
+		{ev("SessionStart", func(e *hooks.Event) { e.Source = "resume" }), Idle},
+		{ev("UserPromptSubmit"), Working},
+		{ev("SubagentStart", agent("a2")), Working},
+		{ev("Stop"), Running},
+		{ev("SessionEnd"), Ended},
+	})
+	if in.Background != nil {
+		t.Fatalf("background %v after SessionEnd", in.Background)
 	}
 }

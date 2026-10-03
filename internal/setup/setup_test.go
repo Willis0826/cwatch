@@ -8,6 +8,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"cwatch/internal/hooks"
 )
 
 const existing = `{
@@ -47,7 +49,7 @@ func TestInstallIdempotentAndUninstallPreserves(t *testing.T) {
 	if err != nil || !modified {
 		t.Fatalf("install: %v %v", modified, err)
 	}
-	if len(changes) != 10 {
+	if len(changes) != len(hooks.Events) {
 		t.Fatalf("%d changes", len(changes))
 	}
 	twice, changes2, modified2, err := PlanInstall(once, c)

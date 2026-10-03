@@ -60,6 +60,8 @@ func stateIcon(in state.Instance) (string, string) {
 		return "🟡", "permission"
 	case state.Working:
 		return "🟢", "working"
+	case state.Running:
+		return "🔵", "running"
 	case state.Idle:
 		return "⚪", "idle"
 	case state.Error:
@@ -76,6 +78,8 @@ func (t theme) stateColor(in state.Instance) color.Color {
 		return t.yellow
 	case state.Working:
 		return t.green
+	case state.Running:
+		return t.blue
 	case state.Error:
 		return t.red
 	case state.Ended:
@@ -123,6 +127,8 @@ func activityCell(in state.Instance, excerpts bool) string {
 			return "💬 " + q(in.PromptExcerpt)
 		}
 		return "💭 thinking"
+	case state.Running:
+		return "⏳ background: " + in.BackgroundSummary()
 	case state.Error:
 		s := "💥 API error"
 		if in.ErrorType != "" {
@@ -255,7 +261,7 @@ func (m Model) windowTitle() string {
 	for _, c := range []struct {
 		st   state.State
 		icon string
-	}{{state.NeedsPermission, "🟡"}, {state.Error, "🔴"}, {state.Working, "🟢"}, {state.Idle, "⚪"}} {
+	}{{state.NeedsPermission, "🟡"}, {state.Error, "🔴"}, {state.Working, "🟢"}, {state.Running, "🔵"}, {state.Idle, "⚪"}} {
 		if n := counts[c.st]; n > 0 {
 			parts = append(parts, fmt.Sprintf("%s%d", c.icon, n))
 		}
@@ -334,6 +340,7 @@ func (m Model) titleBar(w int) string {
 	add(counts[state.NeedsPermission], "🟡", "need you", t.yellow)
 	add(counts[state.Error], "🔴", "error", t.red)
 	add(counts[state.Working], "🟢", "working", t.green)
+	add(counts[state.Running], "🔵", "running", t.blue)
 	add(counts[state.Idle], "⚪", "idle", t.text)
 	add(counts[state.Ended], "⚫", "ended", t.gray)
 	line := left + " " + strings.Join(chips, "")
@@ -494,6 +501,17 @@ func (m Model) renderDetails(w int) string {
 	line("💻 Terminal", fmt.Sprintf("%s %s · pane %s", in.TerminalKind, in.TTY, in.ITermSessionID))
 	line("🕒 Last event", fmt.Sprintf("%s, %s ago", in.LastEvent, app.Age(m.now, in.LastEventAt)))
 	line("🔧 Tool", in.CurrentTool)
+	if len(in.Background) > 0 {
+		var tasks []string
+		for _, task := range in.Background {
+			s := task.Kind
+			if task.Name != "" {
+				s = task.Name + " " + s
+			}
+			tasks = append(tasks, s+", "+app.Age(m.now, task.Since))
+		}
+		line("⏳ Background", strings.Join(tasks, " · "))
+	}
 	if in.LastToolError != "" {
 		line("🚨 Tool error", in.LastToolError)
 	}

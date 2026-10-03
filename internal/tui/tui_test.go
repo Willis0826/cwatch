@@ -172,7 +172,7 @@ func TestTableFitsWidth(t *testing.T) {
 func TestEmojiStates(t *testing.T) {
 	cases := map[state.State]string{
 		state.NeedsPermission: "🟡 permission", state.Working: "🟢 working", state.Idle: "⚪ idle",
-		state.Error: "🔴 error", state.Ended: "⚫ ended",
+		state.Running: "🔵 running", state.Error: "🔴 error", state.Ended: "⚫ ended",
 	}
 	for st, want := range cases {
 		if got := stateCell(inst("1aaaaaaa", st, 1, "")); got != want {
@@ -221,5 +221,13 @@ func TestWindowTitle(t *testing.T) {
 	}
 	if got := New(&app.Env{Now: func() time.Time { return now }}, Options{}).windowTitle(); got != "cwatch" {
 		t.Fatalf("loading title %q", got)
+	}
+}
+
+func TestRunningActivity(t *testing.T) {
+	in := inst("1aaaaaaa", state.Running, 1, "")
+	in.Background = []state.Task{{Kind: state.TaskSubagent, ID: "a1"}, {Kind: state.TaskSubagent, ID: "a2"}, {Kind: state.TaskShell, ID: "t1"}}
+	if got := activityCell(in, true); got != "⏳ background: 2 subagents, 1 shell" {
+		t.Fatalf("activity %q", got)
 	}
 }

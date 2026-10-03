@@ -84,3 +84,40 @@ func TestEventJSONOmitsExcerpts(t *testing.T) {
 		t.Fatal("assistant message not parsed")
 	}
 }
+
+func TestParseBackgroundFlag(t *testing.T) {
+	ev, _ := Parse([]byte(`{"session_id":"s","hook_event_name":"PostToolUse","tool_name":"Bash","tool_use_id":"t1",
+	"tool_input":{"command":"make","run_in_background":true},"tool_response":{"x":1}}`), false)
+	if !ev.Background || ev.Kind != KindPostTool {
+		t.Fatalf("parsed %+v", ev)
+	}
+	ev, _ = Parse([]byte(`{"session_id":"s","hook_event_name":"PostToolUse","tool_input":{"command":"ls"}}`), false)
+	if ev.Background {
+		t.Fatal("background without the flag")
+	}
+}
+
+func TestParseSubagentEvents(t *testing.T) {
+	ev, _ := Parse([]byte(`{"session_id":"s","hook_event_name":"SubagentStart","agent_id":"a1","agent_type":"Explore"}`), false)
+	if ev.Kind != KindSubagentStart || ev.AgentID != "a1" || ev.AgentType != "Explore" {
+		t.Fatalf("parsed %+v", ev)
+	}
+	ev, _ = Parse([]byte(`{"session_id":"s","hook_event_name":"SubagentStop","agent_id":"a1"}`), false)
+	if ev.Kind != KindSubagentStop {
+		t.Fatalf("parsed %+v", ev)
+	}
+}
+
+func TestParseTaskNotifications(t *testing.T) {
+	prompt := "[SYSTEM NOTIFICATION] <task-notification> <task-id>b1</task-id> <tool-use-id>toolu_1</tool-use-id> " +
+		"<status>completed</status> </task-notification> <task-notification><tool-use-id>toolu_2</tool-use-id>" +
+		"<status>running</status></task-notification><task-notification><tool-use-id> toolu_3 </tool-use-id><status>Killed</status>"
+	ev, _ := Parse([]byte(`{"session_id":"s","hook_event_name":"UserPromptSubmit","prompt":"`+prompt+`"}`), false)
+	if !ev.IsTaskNotification || strings.Join(ev.TasksDone, ",") != "toolu_1,toolu_3" {
+		t.Fatalf("notification %v, done %v", ev.IsTaskNotification, ev.TasksDone)
+	}
+	ev, _ = Parse([]byte(`{"session_id":"s","hook_event_name":"UserPromptSubmit","prompt":"fix the <status>completed</status> bug"}`), false)
+	if ev.IsTaskNotification || ev.TasksDone != nil {
+		t.Fatalf("plain prompt parsed as notification: %+v", ev)
+	}
+}
