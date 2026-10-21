@@ -1,8 +1,9 @@
 // Package hooks parses Claude Code hook input and normalises it into events.
 //
 // The parser reads the top-level JSON object key by key. It keeps only the
-// fields that the monitor needs and skips all other fields. It does not keep
-// tool input, tool output, or the raw payload.
+// fields that the monitor needs and skips all other fields. From the tool input
+// and the tool output it keeps only the background flag, the task identifiers
+// and the task timeout. It does not keep the raw payload.
 package hooks
 
 import (
@@ -96,8 +97,13 @@ type Event struct {
 	ErrorDetail      string `json:"error_detail,omitempty"`      // StopFailure or PostToolUseFailure (bounded)
 	IsInterrupt      bool   `json:"is_interrupt,omitempty"`      // PostToolUseFailure
 	Background       bool   `json:"background,omitempty"`        // tool_input.run_in_background
-	// TasksDone lists the tool use IDs of background tasks that a
-	// task notification prompt reports as finished.
+	StopTaskID       string `json:"stop_task_id,omitempty"`      // tool_input.task_id of TaskStop
+	TaskID           string `json:"task_id,omitempty"`           // tool_response.backgroundTaskId or taskId
+	// TaskTimeoutMs is the time after which a monitor stops by itself. It is
+	// zero for a persistent monitor and for a shell.
+	TaskTimeoutMs int64 `json:"task_timeout_ms,omitempty"`
+	// TasksDone lists the tool use IDs and task IDs of background tasks
+	// that a task notification prompt reports as finished.
 	TasksDone          []string `json:"tasks_done,omitempty"`
 	IsTaskNotification bool     `json:"task_notification,omitempty"` // UserPromptSubmit
 	Prompt             string   `json:"-"`                           // UserPromptSubmit (bounded)
@@ -218,12 +224,30 @@ func assign(ev *Event, key string, raw json.RawMessage) {
 		_ = json.Unmarshal(raw, &b)
 		ev.IsInterrupt = b
 	case "tool_input":
-		// Keep only the background flag. Discard all other tool input.
+		// Keep only the background flag and the task to stop. Discard all
+		// other tool input.
 		var in struct {
-			RunInBackground bool `json:"run_in_background"`
+			RunInBackground bool   `json:"run_in_background"`
+			TaskID          string `json:"task_id"`
+			ShellID         string `json:"shell_id"` // KillShell, the older name of TaskStop
 		}
 		_ = json.Unmarshal(raw, &in)
 		ev.Background = in.RunInBackground
+		ev.StopTaskID = textutil.OneLine(in.TaskID+in.ShellID, MaxIdentifier)
+	case "tool_response":
+		// Keep only the task identifier and the timeout of a background
+		// task. Discard all other tool output.
+		var out struct {
+			BackgroundTaskID string `json:"backgroundTaskId"`
+			TaskID           string `json:"taskId"`
+			TimeoutMs        int64  `json:"timeoutMs"`
+			Persistent       bool   `json:"persistent"`
+		}
+		_ = json.Unmarshal(raw, &out)
+		ev.TaskID = textutil.OneLine(out.BackgroundTaskID+out.TaskID, MaxIdentifier)
+		if !out.Persistent && out.TimeoutMs > 0 {
+			ev.TaskTimeoutMs = out.TimeoutMs
+		}
 	case "prompt":
 		p := str(raw)
 		ev.IsTaskNotification, ev.TasksDone = parseTaskNotifications(p)
@@ -243,7 +267,8 @@ var finalTaskStatus = map[string]bool{
 
 // parseTaskNotifications finds the <task-notification> blocks that Claude
 // Code puts in a prompt when a background task changes. It returns whether
-// the prompt has a block, and the tool use IDs of the tasks that finished.
+// the prompt has a block, and the tool use IDs and task IDs of the tasks that
+// finished.
 func parseTaskNotifications(p string) (bool, []string) {
 	const open, end = "<task-notification>", "</task-notification>"
 	found := false
@@ -261,10 +286,13 @@ func parseTaskNotifications(p string) (bool, []string) {
 		} else {
 			p = ""
 		}
-		id := textutil.OneLine(tagValue(block, "tool-use-id"), MaxIdentifier)
-		status := strings.ToLower(tagValue(block, "status"))
-		if id != "" && finalTaskStatus[status] && len(done) < 64 {
-			done = append(done, id)
+		if !finalTaskStatus[strings.ToLower(tagValue(block, "status"))] {
+			continue
+		}
+		for _, tag := range []string{"tool-use-id", "task-id"} {
+			if id := textutil.OneLine(tagValue(block, tag), MaxIdentifier); id != "" && len(done) < 64 {
+				done = append(done, id)
+			}
 		}
 	}
 	return found, done

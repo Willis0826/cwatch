@@ -108,12 +108,36 @@ func TestParseSubagentEvents(t *testing.T) {
 	}
 }
 
+func TestParseBackgroundTaskIDs(t *testing.T) {
+	bash, _ := Parse([]byte(`{"session_id":"s","hook_event_name":"PostToolUse","tool_name":"Bash",
+	"tool_input":{"command":"sleep 300","run_in_background":true},
+	"tool_response":{"stdout":"","stderr":"","interrupted":false,"backgroundTaskId":"bz7cekm5c"}}`), false)
+	if !bash.Background || bash.TaskID != "bz7cekm5c" || bash.TaskTimeoutMs != 0 {
+		t.Fatalf("background Bash: %+v", bash)
+	}
+	monitor, _ := Parse([]byte(`{"session_id":"s","hook_event_name":"PostToolUse","tool_name":"Monitor",
+	"tool_input":{"command":"tail -f x","timeout_ms":60000},"tool_response":{"taskId":"b6rhmd6b1","timeoutMs":60000,"persistent":false}}`), false)
+	if monitor.TaskID != "b6rhmd6b1" || monitor.TaskTimeoutMs != 60000 {
+		t.Fatalf("Monitor: %+v", monitor)
+	}
+	persistent, _ := Parse([]byte(`{"session_id":"s","hook_event_name":"PostToolUse","tool_name":"Monitor",
+	"tool_response":{"taskId":"b7","timeoutMs":3600000,"persistent":true}}`), false)
+	if persistent.TaskTimeoutMs != 0 {
+		t.Fatalf("persistent Monitor: %+v", persistent)
+	}
+	stop, _ := Parse([]byte(`{"session_id":"s","hook_event_name":"PostToolUse","tool_name":"TaskStop",
+	"tool_input":{"task_id":"bz7cekm5c"},"tool_response":{"message":"Successfully stopped task","task_id":"bz7cekm5c"}}`), false)
+	if stop.StopTaskID != "bz7cekm5c" || stop.TaskID != "" {
+		t.Fatalf("TaskStop: %+v", stop)
+	}
+}
+
 func TestParseTaskNotifications(t *testing.T) {
 	prompt := "[SYSTEM NOTIFICATION] <task-notification> <task-id>b1</task-id> <tool-use-id>toolu_1</tool-use-id> " +
 		"<status>completed</status> </task-notification> <task-notification><tool-use-id>toolu_2</tool-use-id>" +
 		"<status>running</status></task-notification><task-notification><tool-use-id> toolu_3 </tool-use-id><status>Killed</status>"
 	ev, _ := Parse([]byte(`{"session_id":"s","hook_event_name":"UserPromptSubmit","prompt":"`+prompt+`"}`), false)
-	if !ev.IsTaskNotification || strings.Join(ev.TasksDone, ",") != "toolu_1,toolu_3" {
+	if !ev.IsTaskNotification || strings.Join(ev.TasksDone, ",") != "toolu_1,b1,toolu_3" {
 		t.Fatalf("notification %v, done %v", ev.IsTaskNotification, ev.TasksDone)
 	}
 	ev, _ = Parse([]byte(`{"session_id":"s","hook_event_name":"UserPromptSubmit","prompt":"fix the <status>completed</status> bug"}`), false)
