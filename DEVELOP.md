@@ -270,7 +270,7 @@ CAUTION: The hash check finds a damaged download. It does not prove who made the
 
 - The state directory is `~/.cwatch/` (mode 0700). The database is `~/.cwatch/cwatch.db` (mode 0600).
 - The store is SQLite in WAL mode with the pure-Go driver `modernc.org/sqlite`. Each hook writes the event and the updated instance in one `BEGIN IMMEDIATE` transaction. The busy timeout is 3 seconds. A lock error that SQLite returns without a wait gets a bounded retry.
-- cwatch stores normalised event fields only: event name, tool name, tool-use ID, agent ID, notification type, and error type. It does not store tool input, tool output, the environment, or the raw hook payload.
+- cwatch stores normalised event fields only: event name, tool name, tool-use ID, agent ID, notification type, and error type. For background tasks it also stores the background flag, the task ID, and the monitor timeout. It does not store other tool input, other tool output, the environment, or the raw hook payload.
 - cwatch stores the latest prompt (at most 1,000 characters) and the latest final response text from `Stop` (at most 2,000 characters). These excerpts can contain sensitive text. They stay on this computer. Use `cwatch setup --no-excerpts` to store none, and `--no-excerpts` on `list` or the dashboard to show none.
 - The details view reads at most the last 256 KiB of the transcript. It reads the transcript as data only.
 - cwatch removes control characters and ANSI escape sequences from all text before it stores or shows that text.
@@ -301,6 +301,7 @@ These values include process start. Most of the time is process start and the in
 - **Other dialogs:** MCP elicitation dialogs and `agent_needs_input` notifications do not change the state. cwatch records them in the details view.
 - **Ordering:** Claude Code sends no sequence number or timestamp with hook events. cwatch orders events by the local receive order (`seq`). Two hooks that Claude Code starts at the same time can arrive in a different order. `PreToolUse` and `PermissionRequest` give no shared identifier, so cwatch correlates a permission request with a tool by tool name and agent ID.
 - **Background subagents:** Tool events from a subagent that runs after the main turn stops do not make the session `working`. cwatch records them as subagent activity.
+- **Background shells and monitors:** cwatch removes a background task when a task notification reports it finished, when `TaskStop` stops it, or when the timeout of a monitor passes. `TaskStop` and an expired monitor send no notification with a status. cwatch removes an expired monitor at the next event of the session, so the session can show `running` until then.
 - **Unsupported focus targets:** tmux, SSH, Terminal.app, and other terminals. cwatch lists these sessions but refuses focus.
 - **Platform:** macOS only. On other platforms, process checks fail and liveness is `unknown`.
 - **Settings scope:** Setup edits the user settings file only. It does not edit project settings or managed settings. If `allowManagedHooksOnly` is set, Claude Code does not run the cwatch hooks.

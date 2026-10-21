@@ -254,6 +254,42 @@ func TestBackgroundShellAndMonitor(t *testing.T) {
 	}
 }
 
+func TestBackgroundTaskStopAndMonitorTimeout(t *testing.T) {
+	bash := func(e *hooks.Event) { e.Background, e.TaskID = true, "b1" }
+	monitor := func(e *hooks.Event) { e.TaskID, e.TaskTimeoutMs = "b2", 90_000 }
+	persistent := func(e *hooks.Event) { e.TaskID = "b3" }
+	stop := func(id string) func(*hooks.Event) { return func(e *hooks.Event) { e.StopTaskID = id } }
+	// Each step is 30 seconds after the step before it.
+	in := runSteps(t, Instance{}, []step{
+		{ev("UserPromptSubmit"), Working},
+		{ev("PostToolUse", tool("Bash", "t1"), bash), Working},
+		{ev("PostToolUse", tool("Monitor", "t2"), monitor), Working},
+		{ev("PostToolUse", tool("Monitor", "t3"), persistent), Working},
+		{ev("PostToolUse", tool("TaskStop", "t4"), stop("b1")), Working},
+		{ev("Stop"), Running},
+		// The monitor t2 expires 90 seconds after it starts.
+		{ev("UserPromptSubmit"), Working},
+		{ev("Stop"), Running},
+		{ev("UserPromptSubmit"), Working},
+		{ev("PostToolUse", tool("TaskStop", "t5"), stop("b3")), Working},
+		{ev("Stop"), Idle},
+	})
+	if in.Background != nil {
+		t.Fatalf("background %v after TaskStop and the timeout", in.Background)
+	}
+}
+
+func TestBackgroundTaskNotificationByTaskID(t *testing.T) {
+	done := func(e *hooks.Event) { e.IsTaskNotification, e.TasksDone = true, []string{"b2"} }
+	runSteps(t, Instance{}, []step{
+		{ev("UserPromptSubmit"), Working},
+		{ev("PostToolUse", tool("Monitor", "t2"), func(e *hooks.Event) { e.TaskID = "b2" }), Working},
+		{ev("Stop"), Running},
+		{ev("UserPromptSubmit", done), Working},
+		{ev("Stop"), Idle},
+	})
+}
+
 func TestBackgroundClearedOnNewSessionAndEnd(t *testing.T) {
 	in := runSteps(t, Instance{}, []step{
 		{ev("UserPromptSubmit"), Working},

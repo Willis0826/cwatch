@@ -43,7 +43,9 @@ func Reduce(in Instance, ev hooks.Event, m Meta) Instance {
 	if out.State == Ended {
 		return reduceEnded(out, ev, m)
 	}
-	return settleBackground(reduceLive(out, ev, m))
+	out = reduceLive(out, ev, m)
+	out.Background = removeExpired(out.Background, m.At)
+	return settleBackground(out)
 }
 
 func reduceLive(out Instance, ev hooks.Event, m Meta) Instance {
@@ -124,12 +126,21 @@ func reduceLive(out Instance, ev hooks.Event, m Meta) Instance {
 			// A background shell or monitor of the main thread sends a task
 			// notification prompt when it finishes. A background task of a
 			// subagent reports to the subagent, so it is not tracked.
+			task := Task{ID: ev.ToolUseID, TaskID: ev.TaskID, Name: ev.ToolName, Since: m.At}
+			if ev.TaskTimeoutMs > 0 {
+				task.Until = m.At.Add(time.Duration(ev.TaskTimeoutMs) * time.Millisecond)
+			}
 			switch {
+			case ev.ToolName == "TaskStop" || ev.ToolName == "KillShell":
+				// A task that TaskStop stops sends no task notification.
+				out.Background = removeTask(out.Background, ev.StopTaskID)
 			case ev.ToolName == "Monitor":
-				out.Background = addTask(out.Background, Task{Kind: TaskMonitor, ID: ev.ToolUseID, Name: ev.ToolName, Since: m.At})
+				task.Kind = TaskMonitor
+				out.Background = addTask(out.Background, task)
 			case ev.Background && ev.ToolName != "Agent" && ev.ToolName != "Task":
 				// SubagentStart and SubagentStop track the subagents.
-				out.Background = addTask(out.Background, Task{Kind: TaskShell, ID: ev.ToolUseID, Name: ev.ToolName, Since: m.At})
+				task.Kind = TaskShell
+				out.Background = addTask(out.Background, task)
 			}
 		}
 		if ev.Kind == hooks.KindPostToolFailure {
@@ -275,13 +286,26 @@ func addTask(list []Task, t Task) []Task {
 	return append(list, t)
 }
 
+// removeTask removes the task whose tool use ID, agent ID or task ID is id.
 func removeTask(list []Task, id string) []Task {
 	if id == "" {
 		return list
 	}
 	out := list[:0]
 	for _, t := range list {
-		if t.ID != id {
+		if t.ID != id && t.TaskID != id {
+			out = append(out, t)
+		}
+	}
+	return out
+}
+
+// removeExpired removes the monitors whose timeout passed. A monitor that
+// expires sends a notification with no status.
+func removeExpired(list []Task, now time.Time) []Task {
+	out := list[:0]
+	for _, t := range list {
+		if t.Until.IsZero() || now.Before(t.Until) {
 			out = append(out, t)
 		}
 	}

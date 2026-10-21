@@ -70,10 +70,12 @@ const (
 
 // Task is a background task that can run after the main turn stops.
 type Task struct {
-	Kind  string    `json:"kind"`           // subagent, shell, or monitor
-	ID    string    `json:"id"`             // agent ID or tool use ID
-	Name  string    `json:"name,omitempty"` // agent type or tool name
-	Since time.Time `json:"since"`
+	Kind   string    `json:"kind"`              // subagent, shell, or monitor
+	ID     string    `json:"id"`                // agent ID or tool use ID
+	TaskID string    `json:"task_id,omitempty"` // the ID that TaskStop and task notifications use
+	Name   string    `json:"name,omitempty"`    // agent type or tool name
+	Since  time.Time `json:"since"`
+	Until  time.Time `json:"until,omitzero"` // when a monitor with a timeout stops by itself
 }
 
 // Instance is one Claude Code process running one conversation in one
