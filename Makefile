@@ -14,7 +14,7 @@
 #   NO_MENUBAR=1     Do not install the menu bar agent.
 #   SETTINGS=FILE    Claude Code settings file (default: cwatch default).
 
-VERSION ?= 0.5.0
+VERSION ?= 0.6.0
 LDFLAGS := -s -w -X main.version=$(VERSION)
 
 # The oldest macOS that the binaries support. Go itself needs macOS 13.
