@@ -104,6 +104,17 @@ return "NOT_FOUND"
 end run
 `
 
+const currentScript = `
+on run argv
+if application id "com.googlecode.iterm2" is not running then return "NOT_RUNNING"
+tell application id "com.googlecode.iterm2"
+if not frontmost then return "BACKGROUND"
+if (count of windows) is 0 then return "BACKGROUND"
+return "OK" & (id of current session of current window)
+end tell
+end run
+`
+
 // ITerm is the iTerm2 adapter.
 type ITerm struct {
 	Runner  Runner
@@ -241,5 +252,22 @@ func (t ITerm) Focus(ctx context.Context, sessionID, tty string) (Pane, error) {
 		return Pane{}, ErrPaneNotFound
 	default:
 		return Pane{}, fmt.Errorf("unexpected iTerm2 answer")
+	}
+}
+
+// CurrentSession returns the session ID of the pane that the user looks at.
+// It returns an empty string when iTerm2 is not the frontmost application.
+func (t ITerm) CurrentSession(ctx context.Context) (string, error) {
+	out, err := t.run(ctx, currentScript)
+	if err != nil {
+		return "", err
+	}
+	switch {
+	case out == "NOT_RUNNING", out == "BACKGROUND":
+		return "", nil
+	case strings.HasPrefix(out, "OK"):
+		return strings.ToUpper(strings.TrimPrefix(out, "OK")), nil
+	default:
+		return "", fmt.Errorf("unexpected iTerm2 answer")
 	}
 }
