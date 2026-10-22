@@ -141,3 +141,22 @@ func TestFocusAdapter(t *testing.T) {
 		t.Fatal("invalid tty accepted")
 	}
 }
+
+func TestCurrentSession(t *testing.T) {
+	cases := []struct {
+		out, want string
+		err       bool
+	}{
+		{"OK8c80aab2-22de-4456-9e87-1faec774a15b", "8C80AAB2-22DE-4456-9E87-1FAEC774A15B", false},
+		{"BACKGROUND", "", false},
+		{"NOT_RUNNING", "", false},
+		{"garbage", "", true},
+	}
+	for _, c := range cases {
+		it := ITerm{Runner: &fakeRunner{enumerate: c.out}}
+		got, err := it.CurrentSession(context.Background())
+		if got != c.want || (err != nil) != c.err {
+			t.Errorf("%q: got %q, %v", c.out, got, err)
+		}
+	}
+}

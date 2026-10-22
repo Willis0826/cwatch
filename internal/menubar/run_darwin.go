@@ -6,6 +6,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 	"sync"
 	"time"
 
@@ -41,6 +42,7 @@ func Run(env *app.Env) error {
 
 type menu struct {
 	env       *app.Env
+	iterm     terminal.ITerm
 	notice    *systray.MenuItem
 	rows      []*systray.MenuItem
 	more      *systray.MenuItem
@@ -51,13 +53,15 @@ type menu struct {
 	ids       []string // instance ID of each visible row
 	err       string   // last focus error
 	errUntil  time.Time
+	alerts    Tracker
+	shown     string // instance ID of the alert on the card
 	refreshCh chan struct{}
 }
 
 func newMenu(env *app.Env) *menu {
 	systray.SetTitle(IdleTitle)
 	systray.SetTooltip("cwatch: your Claude Code sessions")
-	m := &menu{env: env, refreshCh: make(chan struct{}, 1)}
+	m := &menu{env: env, iterm: terminal.NewITerm(), refreshCh: make(chan struct{}, 1)}
 	m.notice = systray.AddMenuItem("", "")
 	m.notice.Disable()
 	m.notice.Hide()
@@ -86,6 +90,18 @@ func (m *menu) start() {
 		}
 	}()
 	go func() {
+		for a := range panelActions {
+			m.mu.Lock()
+			m.alerts.Seen(a.id)
+			m.shown = ""
+			m.mu.Unlock()
+			if a.goTo {
+				m.focus(a.id)
+			}
+			m.requestRefresh()
+		}
+	}()
+	go func() {
 		<-m.quit.ClickedCh
 		systray.Quit()
 	}()
@@ -101,6 +117,10 @@ func (m *menu) loop() {
 		select {
 		case <-t.C:
 		case <-systray.TrayOpenedCh:
+			// The user sees all sessions in the menu.
+			m.mu.Lock()
+			m.alerts.SeenAll()
+			m.mu.Unlock()
 		case <-m.refreshCh:
 		}
 		m.refresh()
@@ -110,9 +130,22 @@ func (m *menu) loop() {
 func (m *menu) refresh() {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
-	v := Build(m.env.Load(ctx, app.LoadOptions{NoTokens: true}))
+	snap := m.env.Load(ctx, app.LoadOptions{NoTokens: true})
+	v := Build(snap)
 
 	m.mu.Lock()
+	alerts := m.alerts.Update(snap.Instances)
+	if m.shown != "" && !m.alerts.Unseen(m.shown) {
+		m.shown = ""
+		hidePanel()
+	}
+	m.mu.Unlock()
+	if len(alerts) > 0 {
+		m.alert(ctx, alerts)
+	}
+
+	m.mu.Lock()
+	v.Title = WithBell(v.Title, m.alerts.Count())
 	notice := v.Notice
 	if m.err != "" && time.Now().Before(m.errUntil) {
 		notice = m.err
@@ -146,6 +179,27 @@ func (m *menu) refresh() {
 		m.more.Show()
 	} else {
 		m.more.Hide()
+	}
+}
+
+// alert shows the most important alert on the card. It shows no card for
+// the pane that the user looks at, because the user already sees it.
+func (m *menu) alert(ctx context.Context, alerts []Alert) {
+	ctx, cancel := context.WithTimeout(ctx, 3*time.Second)
+	defer cancel()
+	current, _ := m.iterm.CurrentSession(ctx)
+	for _, a := range alerts {
+		if current != "" && strings.EqualFold(a.ITermSessionID, current) {
+			m.mu.Lock()
+			m.alerts.Seen(a.ID)
+			m.mu.Unlock()
+			continue
+		}
+		m.mu.Lock()
+		m.shown = a.ID
+		m.mu.Unlock()
+		showPanel(a)
+		return
 	}
 }
 
@@ -194,6 +248,11 @@ func (m *menu) showError(err error) {
 	m.mu.Lock()
 	m.err, m.errUntil = msg, time.Now().Add(noticeTime)
 	m.mu.Unlock()
+	m.requestRefresh()
+}
+
+// requestRefresh asks the loop to read the state now.
+func (m *menu) requestRefresh() {
 	select {
 	case m.refreshCh <- struct{}{}:
 	default:

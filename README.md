@@ -101,6 +101,28 @@ This command builds and installs `cwatch`, shows the change to your settings, as
 
 The menu shows no message excerpts, because other people can see your screen.
 
+### Alerts
+
+When a session needs you, the menu bar shows a card in the top-right corner of the screen:
+
+```text
+┌──────────────────────────────────────────┐
+▌ 🟡 api-server · fix/auth-timeout          │
+▌ Waits for permission: Bash                │
+▌                     [Dismiss] [Go to pane]│
+└──────────────────────────────────────────┘
+```
+
+- The card shows when a session waits for permission, stops because of an API error, or finishes its turn.
+- A permission card and an error card stay until you act. A card for a finished turn closes after 8 seconds.
+- Click **Go to pane**, or click the card, to go to the pane of the session.
+- Click **Dismiss** to close the card.
+- The card does not take the keyboard focus from your pane.
+- When you look at the pane of the session in iTerm2, cwatch shows no card.
+- If you do not act, the menu bar shows `🔔` before the counts. The `🔔` goes when you open the menu, or when the session changes state again.
+
+Like the menu, the card shows no message excerpts.
+
 If you do not want the menu bar, install with `cwatch setup --no-menubar`. To remove a menu bar that is already installed, run these commands. The first command also removes the hooks, and the second command adds them again:
 
 ```sh
