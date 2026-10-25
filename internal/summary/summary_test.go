@@ -62,12 +62,35 @@ func TestLastWeekDST(t *testing.T) {
 	}
 }
 
+func TestThisWeek(t *testing.T) {
+	loc := time.FixedZone("X", 2*3600)
+	for _, now := range []time.Time{
+		time.Date(2026, 10, 19, 0, 30, 0, 0, loc), // Monday
+		time.Date(2026, 10, 21, 12, 0, 0, 0, loc), // Wednesday
+		time.Date(2026, 10, 25, 23, 0, 0, 0, loc), // Sunday
+	} {
+		r := ThisWeek(now)
+		if got := r.Start.Format("2006-01-02 15:04"); got != "2026-10-19 00:00" || !r.End.Equal(now) {
+			t.Errorf("%v: range %v – %v", now, r.Start, r.End)
+		}
+		if !r.Ongoing() || LastWeek(now).Ongoing() || Yesterday(now).Ongoing() {
+			t.Errorf("%v: wrong Ongoing", now)
+		}
+	}
+	if got := ThisWeek(time.Date(2026, 10, 25, 9, 5, 0, 0, loc)).Label(); got != "this week (Mon 19 Oct – Sun 25 Oct 09:05)" {
+		t.Fatalf("label %q", got)
+	}
+}
+
 func TestParse(t *testing.T) {
 	if _, err := Parse("month", time.Now()); err == nil {
 		t.Fatal("no error for an unknown range")
 	}
 	if r, err := Parse("week", time.Now()); err != nil || r.Kind != KindWeek {
 		t.Fatalf("week: %v %v", r, err)
+	}
+	if r, err := Parse("this-week", time.Now()); err != nil || r.Kind != KindThisWeek {
+		t.Fatalf("this-week: %v %v", r, err)
 	}
 }
 

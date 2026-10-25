@@ -12,9 +12,12 @@ import (
 const (
 	KindYesterday = "yesterday"
 	KindWeek      = "week"
+	KindThisWeek  = "this-week"
 )
 
-// Range is a closed time range in the past: Start is included, End is not.
+// Range is a time range: Start is included, End is not. A range of kind
+// KindThisWeek ends at the time of its creation. All other ranges are in the
+// past.
 type Range struct {
 	Kind  string
 	Start time.Time
@@ -45,6 +48,18 @@ func LastWeek(now time.Time) Range {
 	}
 }
 
+// ThisWeek returns the calendar week of now, from Monday at 00:00 local time
+// until now.
+func ThisWeek(now time.Time) Range {
+	y, m, d := now.Date()
+	sinceMonday := (int(now.Weekday()) + 6) % 7
+	return Range{
+		Kind:  KindThisWeek,
+		Start: time.Date(y, m, d-sinceMonday, 0, 0, 0, 0, now.Location()),
+		End:   now,
+	}
+}
+
 // Parse returns the range of a kind name.
 func Parse(kind string, now time.Time) (Range, error) {
 	switch kind {
@@ -52,8 +67,16 @@ func Parse(kind string, now time.Time) (Range, error) {
 		return Yesterday(now), nil
 	case KindWeek:
 		return LastWeek(now), nil
+	case KindThisWeek:
+		return ThisWeek(now), nil
 	}
-	return Range{}, fmt.Errorf("unknown range %q (use %q or %q)", kind, KindYesterday, KindWeek)
+	return Range{}, fmt.Errorf("unknown range %q (use %q, %q, or %q)", kind, KindYesterday, KindWeek, KindThisWeek)
+}
+
+// Ongoing reports whether the range is not finished. cwatch does not store
+// the summary of an ongoing range, because new work changes it.
+func (r Range) Ongoing() bool {
+	return r.Kind == KindThisWeek
 }
 
 // Contains reports whether t is in the range.
@@ -69,8 +92,11 @@ func (r Range) lastDay() time.Time {
 
 // Label returns a name for people, such as "yesterday (Fri 26 Sep)".
 func (r Range) Label() string {
-	if r.Kind == KindWeek {
+	switch r.Kind {
+	case KindWeek:
 		return fmt.Sprintf("last week (%s – %s)", r.Start.Format("Mon 2 Jan"), r.lastDay().Format("Mon 2 Jan"))
+	case KindThisWeek:
+		return fmt.Sprintf("this week (%s – %s)", r.Start.Format("Mon 2 Jan"), r.End.Format("Mon 2 Jan 15:04"))
 	}
 	return fmt.Sprintf("%s (%s)", r.Kind, r.Start.Format("Mon 2 Jan"))
 }

@@ -24,6 +24,7 @@ const (
 var summaryKinds = []struct{ kind, label, key string }{
 	{summary.KindYesterday, "Yesterday", "y"},
 	{summary.KindWeek, "Last week (Monday to Sunday)", "w"},
+	{summary.KindThisWeek, "This week (Monday to now)", "t"},
 }
 
 type summaryMsg struct {
@@ -174,6 +175,8 @@ func (m Model) renderSummary(w int) string {
 		note = ""
 	case m.sum.cached:
 		note = "stored · r makes it again"
+	case m.sum.rng.Ongoing() && m.sum.err == nil:
+		note = "new · r makes it again"
 	case m.sum.err == nil:
 		note = "new · stored"
 	}

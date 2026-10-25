@@ -134,7 +134,7 @@ Uninstall removes only the handlers that cwatch owns. It removes a matcher group
 | `cwatch list --json` | Print versioned JSON (`schema_version: 1`). |
 | `cwatch list --all` | Include ended instances. |
 | `cwatch focus <id>` | Focus the iTerm2 pane of an instance. A unique prefix of the ID is sufficient. |
-| `cwatch summary yesterday\|week [--refresh]` | Print a bullet list of your work of yesterday or last week. See [Summary](#summary). |
+| `cwatch summary yesterday\|week\|this-week [--refresh]` | Print a bullet list of your work of yesterday, last week, or this week until now. See [Summary](#summary). |
 | `cwatch upgrade [--check] [--force]` | Install the latest release in place of the running binary. See [Upgrade](#upgrade). |
 | `cwatch menubar` | Show the sessions in the macOS menu bar. The LaunchAgent runs this command. See [The menu bar](#the-menu-bar). |
 | `cwatch setup [--dry-run] [--no-menubar]` | Install the hooks and the menu bar agent. |

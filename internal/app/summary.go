@@ -107,7 +107,7 @@ func (e *Env) ProjectsDir() (string, error) {
 }
 
 // Summary returns the summary of the work in r. It returns a stored summary
-// when one exists, unless refresh is true. It returns ErrNoActivity when no
+// when one exists, unless refresh is true or r is ongoing. It returns ErrNoActivity when no
 // session has records in r. It does not start the model in that case.
 func (e *Env) Summary(ctx context.Context, r summary.Range, refresh bool) (text string, cached bool, err error) {
 	dir := filepath.Join(e.StateDir, SummaryDir)
@@ -144,6 +144,9 @@ func (e *Env) Summary(ctx context.Context, r summary.Range, refresh bool) (text 
 		return "", false, errors.New("claude returned an empty summary")
 	}
 	out += "\n"
+	if r.Ongoing() {
+		return out, false, nil
+	}
 	if err := writeSummary(dir, path, out); err != nil && e.Stderr != nil {
 		fmt.Fprintf(e.Stderr, "cwatch: cannot store the summary: %v\n", err)
 	}
@@ -151,8 +154,12 @@ func (e *Env) Summary(ctx context.Context, r summary.Range, refresh bool) (text 
 	return out, false, nil
 }
 
-// CachedSummary returns the stored summary of r, if one exists.
+// CachedSummary returns the stored summary of r, if one exists. It returns
+// false for an ongoing range.
 func (e *Env) CachedSummary(r summary.Range) (string, bool) {
+	if r.Ongoing() {
+		return "", false
+	}
 	b, err := os.ReadFile(filepath.Join(e.StateDir, SummaryDir, r.CacheName()))
 	if err != nil || len(bytes.TrimSpace(b)) == 0 {
 		return "", false
