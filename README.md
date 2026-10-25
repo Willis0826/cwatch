@@ -16,7 +16,7 @@ The table also shows the project, the git branch, the current tool or the latest
 
 ![The details view](docs/images/details.png)
 
-Push `s` to get a summary of your work of yesterday or last week. See [Summary of your work](#summary-of-your-work).
+Push `s` to get a summary of your work of yesterday, last week, or this week. See [Summary of your work](#summary-of-your-work).
 
 cwatch also shows the counts in the macOS menu bar, for example `🟡1 🟢2 ⚪1`. You can see them when the dashboard is closed. Click the counts to see your sessions. See [Menu bar](#menu-bar).
 
@@ -58,7 +58,7 @@ You need macOS, iTerm2, and Claude Code.
    | `Enter` | Go to the pane of the session. |
    | `→` / `←` | Open or close the details. |
    | `/` | Filter. |
-   | `s` | Summarise your work of yesterday or last week. |
+   | `s` | Summarise your work of yesterday, last week, or this week. |
    | `q` | Quit. |
 
 The first time that you push `Enter`, macOS can ask for permission to control iTerm2. Allow it.
@@ -139,12 +139,13 @@ cwatch can write a bullet list of your work from your Claude Code sessions:
 ```sh
 cwatch summary yesterday
 cwatch summary week
+cwatch summary this-week
 ```
 
-- `yesterday` is the previous calendar day. `week` is the previous week, from Monday to Sunday.
+- `yesterday` is the previous calendar day. `week` is the previous week, from Monday to Sunday. `this-week` is the current week, from Monday until now.
 - The summary has two sections: **Done** for finished work, and **Open** for work that was not finished at the end of the range.
 - cwatch reads your transcripts in `~/.claude/projects` and the git commits of your projects. Then it sends a short digest to Claude with `claude -p`. The call uses your Claude Code login.
-- cwatch keeps each result in `~/.cwatch/summaries`. The next call shows the stored result immediately. To make the summary again, add `--refresh`.
+- cwatch keeps each result in `~/.cwatch/summaries`. The next call shows the stored result immediately. To make the summary again, add `--refresh`. cwatch does not store the `this-week` summary, because the week is not finished.
 - In the dashboard, push `s` and select the range. In the summary, push `r` to make it again.
 
 ![The summary view](docs/images/summary.png)

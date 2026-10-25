@@ -35,9 +35,9 @@ Usage:
   cwatch [flags]                   Open the dashboard (no implicit setup)
   cwatch list [--json] [--all]     List tracked instances
   cwatch focus <instance-id>       Focus the iTerm2 pane of an instance
-  cwatch summary yesterday|week [--refresh]
-                                   Summarise your work of yesterday or last week
-                                   with "claude -p"
+  cwatch summary yesterday|week|this-week [--refresh]
+                                   Summarise your work of yesterday, last week,
+                                   or this week until now with "claude -p"
   cwatch upgrade [--check] [--force]
                                    Install the latest release in place of this binary
   cwatch menubar                   Show the sessions in the macOS menu bar
@@ -247,7 +247,7 @@ func run(args []string, stdout, stderr io.Writer) int {
 
 func summaryCommand(ctx context.Context, env *app.Env, args []string, refresh bool) int {
 	if len(args) != 1 {
-		fmt.Fprintf(env.Stderr, "cwatch: summary needs one range: %q or %q\n", summary.KindYesterday, summary.KindWeek)
+		fmt.Fprintf(env.Stderr, "cwatch: summary needs one range: %q, %q, or %q\n", summary.KindYesterday, summary.KindWeek, summary.KindThisWeek)
 		return app.ExitUsage
 	}
 	r, err := summary.Parse(args[0], env.Now())

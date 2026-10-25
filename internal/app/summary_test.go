@@ -76,6 +76,19 @@ func TestSummaryCaches(t *testing.T) {
 	}
 }
 
+func TestSummaryOngoingIsNotStored(t *testing.T) {
+	env, fake, _ := summaryEnv(t, yesterdayPrompt)
+	r := summary.ThisWeek(env.Now())
+	for i := 1; i <= 2; i++ {
+		if _, cached, err := env.Summary(context.Background(), r, false); err != nil || cached || fake.calls != i {
+			t.Fatalf("call %d: %v %v calls %d", i, cached, err, fake.calls)
+		}
+	}
+	if _, err := os.Stat(filepath.Join(env.StateDir, SummaryDir, r.CacheName())); !os.IsNotExist(err) {
+		t.Fatalf("the summary of an ongoing range was stored: %v", err)
+	}
+}
+
 func TestSummaryNoActivity(t *testing.T) {
 	env, fake, r := summaryEnv(t, `{"type":"user","timestamp":"2026-09-20T09:00:00Z","cwd":"/w","message":{"role":"user","content":"old"}}`)
 	if _, _, err := env.Summary(context.Background(), r, false); !errors.Is(err, ErrNoActivity) {
