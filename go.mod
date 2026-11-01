@@ -3,7 +3,7 @@ module cwatch
 go 1.26.0
 
 require (
-	charm.land/bubbletea/v2 v2.1.0
+	charm.land/bubbletea/v2 v2.1.1
 	charm.land/lipgloss/v2 v2.0.6
 	fyne.io/systray v1.12.2
 	github.com/charmbracelet/x/ansi v0.11.9
