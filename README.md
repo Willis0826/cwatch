@@ -18,7 +18,7 @@ The table also shows the project, the git branch, the current tool or the latest
 
 Push `s` to get a summary of your work of yesterday, last week, or this week. See [Summary of your work](#summary-of-your-work).
 
-cwatch also shows the counts in the macOS menu bar, for example `🟡1 🟢2 ⚪1`. You can see them when the dashboard is closed. Click the counts to see your sessions. See [Menu bar](#menu-bar).
+cwatch also shows an owl and the counts in the macOS menu bar. You can see them when the dashboard is closed. Click the owl to see your sessions. See [Menu bar](#menu-bar).
 
 cwatch runs only on your computer. It makes no model calls and uses no network, except `cwatch summary` and `cwatch upgrade`. Its data stays in `~/.cwatch`.
 
@@ -42,7 +42,7 @@ You need macOS, iTerm2, and Claude Code.
    cwatch doctor
    ```
 
-   Setup also starts the menu bar item. It shows `👀` until cwatch receives the first event.
+   Setup also starts the menu bar item. It shows an owl with closed eyes until a session works.
 
 3. Restart the Claude Code sessions that already run, then submit a prompt in each.
 
@@ -81,25 +81,22 @@ This command builds and installs `cwatch`, shows the change to your settings, as
 
 `cwatch setup` also installs a menu bar item. It starts immediately and at each login. You do not need to install another app.
 
-```text
-🟡1 🟢2 🔵1 ⚪1
-  🟡 api-server · fix/auth-timeout — waits for permission: Bash
-  🟢 web-app · feature/search — tool: Edit
-  🟢 cli · main — responding
-  🔵 docs · main — background: 1 subagent
-  ⚪ mobile · release/2.4
-  ───────────────────────────────
-  Open the dashboard in iTerm2
-  Quit the menu bar
-```
+<img src="docs/images/menubar.png" alt="The cwatch menu bar panel" width="360">
 
-- The menu bar shows the number of sessions in each state, for example `🟡1 🟢2 🔵1 ⚪1`. When no session runs, it shows `👀`.
-- Click the counts to see the sessions. Each row shows the state, the project, the git branch, and the current tool.
-- Click a session to go to its iTerm2 pane.
-- Click **Open the dashboard in iTerm2** to open `cwatch` in a new window.
-- Click **Quit the menu bar** to stop it until the next login. To start it again before that, run `cwatch setup`.
+- The menu bar shows a pixel owl, then a coloured dot and a number for each state, for example `🦉 ●1 ●2 ●1`.
+- The owl shows how your sessions are:
+  - Closed eyes: no session works.
+  - Open eyes: a session works or needs you.
+  - Yellow owl: a session needs you, and you did not see it yet. The owl becomes white again when you open the panel, or when the session changes state again.
+- Click the owl to open the panel. The panel shows:
+  - A chip with the number of sessions in each state, and a bar that shows the share of each state.
+  - One card for each session, with the project, the git branch, the current tool, and the time since the last event. A card that needs you has a tint of its state colour.
+- Click a card to go to the pane of the session.
+- Click **Open the dashboard** to open `cwatch` in a new iTerm2 window.
+- Click **Quit** to stop the menu bar until the next login. To start it again before that, run `cwatch setup`.
+- Click outside the panel, or click the owl again, to close the panel.
 
-The menu shows no message excerpts, because other people can see your screen.
+The panel shows no message excerpts, because other people can see your screen.
 
 ### Alerts
 
@@ -119,9 +116,9 @@ When a session needs you, the menu bar shows a card in the top-right corner of t
 - Click **Dismiss** to close the card.
 - The card does not take the keyboard focus from your pane.
 - When you look at the pane of the session in iTerm2, cwatch shows no card.
-- If you do not act, the menu bar shows `🔔` before the counts. The `🔔` goes when you open the menu, or when the session changes state again.
+- If you do not act, the owl in the menu bar becomes yellow. It becomes white again when you open the panel, or when the session changes state again.
 
-Like the menu, the card shows no message excerpts.
+Like the panel, the card shows no message excerpts.
 
 If you do not want the menu bar, install with `cwatch setup --no-menubar`. To remove a menu bar that is already installed, run these commands. The first command also removes the hooks, and the second command adds them again:
 

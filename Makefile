@@ -63,16 +63,19 @@ package: dist
 
 # Install the binary. Build it when Go is available. Else use the prebuilt
 # binary in dist/ for this architecture.
+# Install writes a new file and renames it over the old binary. A copy over
+# the old file keeps its inode, and macOS then stops the new binary with
+# OS_REASON_CODESIGNING, because it keeps the old signature for that inode.
 install:
 ifeq ($(HAVE_GO),yes)
 	@$(MAKE) --no-print-directory build
 	@SRC=bin/cwatch; \
-	install -d "$(BINDIR)" && install -m 0755 "$$SRC" "$(INSTALLED)" && echo "Installed $$SRC to $(INSTALLED)"
+	install -d "$(BINDIR)" && install -m 0755 "$$SRC" "$(INSTALLED).new" && mv -f "$(INSTALLED).new" "$(INSTALLED)" && echo "Installed $$SRC to $(INSTALLED)"
 else
 	@SRC=dist/cwatch-darwin-$(ARCH); \
 	if [ ! -x "$$SRC" ]; then echo "Go is not installed and $$SRC does not exist. Install Go (brew install go), then run make again." >&2; exit 1; fi; \
 	echo "Go is not installed. cwatch uses the prebuilt $$SRC."; \
-	install -d "$(BINDIR)" && install -m 0755 "$$SRC" "$(INSTALLED)" && echo "Installed $$SRC to $(INSTALLED)"
+	install -d "$(BINDIR)" && install -m 0755 "$$SRC" "$(INSTALLED).new" && mv -f "$(INSTALLED).new" "$(INSTALLED)" && echo "Installed $$SRC to $(INSTALLED)"
 endif
 	@case ":$$PATH:" in *":$(BINDIR):"*) ;; *) echo "Note: $(BINDIR) is not on your PATH. Add it to ~/.zshrc: export PATH=\"$(BINDIR):\$$PATH\"";; esac
 	@"$(INSTALLED)" version

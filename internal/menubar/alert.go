@@ -9,10 +9,6 @@ import (
 	"cwatch/internal/textutil"
 )
 
-// BellTitle is the mark in the menu bar when a session needs the user and
-// the user did not see it yet.
-const BellTitle = "🔔"
-
 // MaxAlertLabel is the maximum length of an alert line, in runes.
 const MaxAlertLabel = 60
 
@@ -92,14 +88,6 @@ func (t *Tracker) Unseen(id string) bool {
 
 // Count returns the number of alerts that wait for the user.
 func (t *Tracker) Count() int { return len(t.unseen) }
-
-// WithBell adds the bell to the menu bar title when n alerts wait.
-func WithBell(title string, n int) string {
-	if n == 0 {
-		return title
-	}
-	return BellTitle + " " + title
-}
 
 func alertKind(prev state.State, seen bool, cur state.State) (AlertKind, bool) {
 	if seen && prev == cur {
