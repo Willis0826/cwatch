@@ -84,9 +84,3 @@ func TestTrackerNewSessionInPermission(t *testing.T) {
 		t.Fatalf("count %d", tr.Count())
 	}
 }
-
-func TestWithBell(t *testing.T) {
-	if WithBell("🟢1", 0) != "🟢1" || WithBell("🟡1", 2) != "🔔 🟡1" {
-		t.Fatal("bell title")
-	}
-}

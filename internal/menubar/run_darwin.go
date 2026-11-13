@@ -5,12 +5,10 @@ package menubar
 import (
 	"context"
 	"errors"
-	"fmt"
+	"runtime"
 	"strings"
 	"sync"
 	"time"
-
-	"fyne.io/systray"
 
 	"cwatch/internal/app"
 	"cwatch/internal/terminal"
@@ -20,7 +18,7 @@ import (
 // Supported tells whether this build can show the menu bar.
 const Supported = true
 
-// noticeTime is how long the menu shows a focus error.
+// noticeTime is how long the panel shows a focus error.
 const noticeTime = 15 * time.Second
 
 // openDashboardScript opens a new iTerm2 window that runs the dashboard.
@@ -33,60 +31,47 @@ end tell
 end run
 `
 
+// AppKit must run on the main thread. The main goroutine starts on the main
+// thread, and this lock keeps it there.
+func init() { runtime.LockOSThread() }
+
 // Run shows the menu bar item and blocks until the user quits it. It must
-// run on the main thread.
+// run on the main goroutine.
 func Run(env *app.Env) error {
-	systray.Run(func() { newMenu(env).start() }, nil)
+	m := &menu{env: env, iterm: terminal.NewITerm(), refreshCh: make(chan struct{}, 1)}
+	m.start()
+	runApp()
 	return nil
 }
 
 type menu struct {
-	env       *app.Env
-	iterm     terminal.ITerm
-	notice    *systray.MenuItem
-	rows      []*systray.MenuItem
-	more      *systray.MenuItem
-	dashboard *systray.MenuItem
-	quit      *systray.MenuItem
+	env   *app.Env
+	iterm terminal.ITerm
 
 	mu        sync.Mutex
-	ids       []string // instance ID of each visible row
-	err       string   // last focus error
+	err       string // last focus error
 	errUntil  time.Time
 	alerts    Tracker
 	shown     string // instance ID of the alert on the card
 	refreshCh chan struct{}
 }
 
-func newMenu(env *app.Env) *menu {
-	systray.SetTitle(IdleTitle)
-	systray.SetTooltip("cwatch: your Claude Code sessions")
-	m := &menu{env: env, iterm: terminal.NewITerm(), refreshCh: make(chan struct{}, 1)}
-	m.notice = systray.AddMenuItem("", "")
-	m.notice.Disable()
-	m.notice.Hide()
-	for i := 0; i < MaxRows; i++ {
-		item := systray.AddMenuItem("", "")
-		item.Hide()
-		m.rows = append(m.rows, item)
-	}
-	m.more = systray.AddMenuItem("", "")
-	m.more.Disable()
-	m.more.Hide()
-	systray.AddSeparator()
-	m.dashboard = systray.AddMenuItem("Open the dashboard in iTerm2", "Run cwatch in a new iTerm2 window")
-	m.quit = systray.AddMenuItem("Quit the menu bar", "The menu bar starts again at the next login")
-	m.ids = make([]string, MaxRows)
-	return m
-}
-
 func (m *menu) start() {
-	for i, item := range m.rows {
-		go m.watchRow(i, item)
-	}
 	go func() {
-		for range m.dashboard.ClickedCh {
-			m.openDashboard()
+		for e := range menuEvents {
+			switch e.kind {
+			case eventOpened:
+				// The user sees all sessions in the panel.
+				m.mu.Lock()
+				m.alerts.SeenAll()
+				m.mu.Unlock()
+				m.requestRefresh()
+			case eventFocus:
+				closePanel()
+				m.focus(e.id)
+			case eventDashboard:
+				m.openDashboard()
+			}
 		}
 	}()
 	go func() {
@@ -101,10 +86,6 @@ func (m *menu) start() {
 			m.requestRefresh()
 		}
 	}()
-	go func() {
-		<-m.quit.ClickedCh
-		systray.Quit()
-	}()
 	go m.loop()
 }
 
@@ -116,11 +97,6 @@ func (m *menu) loop() {
 	for {
 		select {
 		case <-t.C:
-		case <-systray.TrayOpenedCh:
-			// The user sees all sessions in the menu.
-			m.mu.Lock()
-			m.alerts.SeenAll()
-			m.mu.Unlock()
 		case <-m.refreshCh:
 		}
 		m.refresh()
@@ -131,7 +107,7 @@ func (m *menu) refresh() {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 	snap := m.env.Load(ctx, app.LoadOptions{NoTokens: true})
-	v := Build(snap)
+	v := Build(snap, time.Now())
 
 	m.mu.Lock()
 	alerts := m.alerts.Update(snap.Instances)
@@ -145,41 +121,14 @@ func (m *menu) refresh() {
 	}
 
 	m.mu.Lock()
-	v.Title = WithBell(v.Title, m.alerts.Count())
-	notice := v.Notice
-	if m.err != "" && time.Now().Before(m.errUntil) {
-		notice = m.err
+	if m.alerts.Count() > 0 {
+		v.Mood = MoodAlert
 	}
-	for i := range m.ids {
-		m.ids[i] = ""
-		if i < len(v.Rows) {
-			m.ids[i] = v.Rows[i].ID
-		}
+	if m.err != "" && time.Now().Before(m.errUntil) {
+		v.Notice = m.err
 	}
 	m.mu.Unlock()
-
-	systray.SetTitle(v.Title)
-	if notice != "" {
-		m.notice.SetTitle(textutil.OneLine(notice, MaxLabel))
-		m.notice.Show()
-	} else {
-		m.notice.Hide()
-	}
-	for i, item := range m.rows {
-		if i < len(v.Rows) {
-			item.SetTitle(v.Rows[i].Label)
-			item.SetTooltip(v.Rows[i].Tooltip)
-			item.Show()
-		} else {
-			item.Hide()
-		}
-	}
-	if v.More > 0 {
-		m.more.SetTitle(fmt.Sprintf("%d more; open the dashboard to see all", v.More))
-		m.more.Show()
-	} else {
-		m.more.Hide()
-	}
+	setView(v)
 }
 
 // alert shows the most important alert on the card. It shows no card for
@@ -200,17 +149,6 @@ func (m *menu) alert(ctx context.Context, alerts []Alert) {
 		m.mu.Unlock()
 		showPanel(a)
 		return
-	}
-}
-
-func (m *menu) watchRow(i int, item *systray.MenuItem) {
-	for range item.ClickedCh {
-		m.mu.Lock()
-		id := m.ids[i]
-		m.mu.Unlock()
-		if id != "" {
-			m.focus(id)
-		}
 	}
 }
 
@@ -235,7 +173,7 @@ func (m *menu) openDashboard() {
 	m.showError(err)
 }
 
-// showError shows err at the top of the menu for a short time.
+// showError shows err at the top of the panel for a short time.
 func (m *menu) showError(err error) {
 	if err == nil {
 		return

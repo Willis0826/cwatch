@@ -104,14 +104,20 @@ Setup obeys these rules:
 
 ## The menu bar
 
-`cwatch menubar` shows the state in the macOS menu bar. It uses `fyne.io/systray`, which calls AppKit through cgo. For this reason, all builds use `CGO_ENABLED=1` and `MACOSX_DEPLOYMENT_TARGET=13.0`. A build with `CGO_ENABLED=0` still works, but it has no menu bar: `cwatch menubar` fails, and setup skips the agent.
+`cwatch menubar` shows the state in the macOS menu bar. It calls AppKit directly through cgo (`internal/menubar/statusitem_darwin.go`). For this reason, all builds use `CGO_ENABLED=1` and `MACOSX_DEPLOYMENT_TARGET=13.0`. A build with `CGO_ENABLED=0` still works, but it has no menu bar: `cwatch menubar` fails, and setup skips the agent.
 
-The menu bar reads the state every 2 seconds and each time the menu opens. It reads no transcripts. A lock file (`menubar.lock` in the state directory) makes sure that only one menu bar runs for each state directory.
+The menu bar has these parts:
+
+- An `NSStatusItem` that shows the owl and the counts. The owl is pixel art in code (`owlSleep` and `owlAwake`). It is a template image, so macOS gives it the colour of the menu bar. The alert owl uses the `owlAwake` pixels in yellow, and it is not a template image.
+- A borderless panel below the status item. It is not a standard `NSMenu`, because a menu cannot show images, colours, or cards. It uses the colours of the README banner.
+- Go sends the panel data as JSON (the `View` type in `menu.go`). The panel calls `cwatchMenuEvent` when the user opens it, clicks a card, or clicks **Open the dashboard**.
+
+The menu bar reads the state every 2 seconds and each time the panel opens. It reads no transcripts. A lock file (`menubar.lock` in the state directory) makes sure that only one menu bar runs for each state directory.
 
 Setup writes a LaunchAgent to `~/Library/LaunchAgents/io.github.willis0826.cwatch.menubar.plist` and loads it with `launchctl bootstrap gui/<uid>`. The agent has these properties:
 
 - `RunAtLoad`: it starts at login.
-- `KeepAlive` with `SuccessfulExit` false: launchd starts it again after a crash, but not after **Quit the menu bar**.
+- `KeepAlive` with `SuccessfulExit` false: launchd starts it again after a crash, but not after **Quit**.
 - `LimitLoadToSessionType` `Aqua`: it runs only in a graphical login session.
 - The output goes to `menubar.log` in the state directory.
 
